@@ -1,0 +1,117 @@
+{
+  "start": "foyer",
+  "rooms": [
+    {
+      "id": "foyer",
+      "name": "Foyer",
+      "description": "The vault is down, the gallery east, the study north.",
+      "exits": {
+        "down": "vault",
+        "east": "gallery",
+        "north": "study"
+      },
+      "items": [
+        {
+          "kind": "container",
+          "id": "chest",
+          "name": "chest",
+          "description": "an oak chest",
+          "contains": [
+            {
+              "kind": "container",
+              "id": "box",
+              "name": "box",
+              "description": "a tin box",
+              "contains": [
+                {
+                  "kind": "plain",
+                  "id": "vault_key",
+                  "name": "vault key",
+                  "description": "a heavy key"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "plain",
+          "id": "decoy",
+          "name": "box",
+          "description": "a box painted on the wall"
+        }
+      ]
+    },
+    {
+      "id": "vault",
+      "name": "Vault",
+      "description": "Cold and empty.",
+      "exits": {
+        "up": "foyer"
+      }
+    },
+    {
+      "id": "gallery",
+      "name": "Gallery",
+      "description": "Paintings.",
+      "exits": {
+        "west": "foyer"
+      }
+    },
+    {
+      "id": "study",
+      "name": "Study",
+      "description": "A desk with a drawer.",
+      "exits": {
+        "south": "foyer"
+      },
+      "items": [
+        {
+          "kind": "container",
+          "id": "drawer",
+          "name": "drawer",
+          "description": "a desk drawer",
+          "contains": [
+            {
+              "kind": "plain",
+              "id": "Gallery_Key",
+              "name": "gallery key",
+              "description": "a key with a capital G"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "doors": [
+    {
+      "id": "vault_door",
+      "name": "vault door",
+      "key": "vault_key",
+      "sides": [
+        {
+          "room": "foyer",
+          "direction": "down"
+        },
+        {
+          "room": "vault",
+          "direction": "up"
+        }
+      ]
+    },
+    {
+      "id": "gallery_door",
+      "name": "gallery door",
+      "key": "Gallery_Key",
+      "sides": [
+        {
+          "room": "foyer",
+          "direction": "east"
+        },
+        {
+          "room": "gallery",
+          "direction": "west"
+        }
+      ]
+    }
+  ]
+}

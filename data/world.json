@@ -1,0 +1,187 @@
+{
+  "start": "entrance_hall",
+  "rooms": [
+    {
+      "id": "entrance_hall",
+      "name": "Entrance Hall",
+      "description": "Cold and tiled. The doors behind you will not open again.",
+      "exits": {
+        "north": "reception"
+      },
+      "items": [
+        {
+          "kind": "plain",
+          "id": "notice",
+          "name": "notice",
+          "description": "a notice pinned by the door"
+        },
+        {
+          "kind": "plain",
+          "id": "torch",
+          "name": "torch",
+          "description": "a rubber torch, the beam yellow"
+        }
+      ]
+    },
+    {
+      "id": "reception",
+      "name": "Reception",
+      "description": "A long desk, and a rack of pigeonholes behind it.",
+      "exits": {
+        "south": "entrance_hall",
+        "east": "library",
+        "west": "workshop"
+      },
+      "items": [
+        {
+          "kind": "container",
+          "id": "pigeonhole",
+          "name": "pigeonhole",
+          "description": "a dusty pigeonhole",
+          "contains": [
+            {
+              "kind": "plain",
+              "id": "brass_key",
+              "name": "brass key",
+              "description": "a small brass key"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "library",
+      "name": "Library",
+      "description": "Shelves to the ceiling. Most of them are empty.",
+      "exits": {
+        "west": "reception"
+      },
+      "items": [
+        {
+          "kind": "plain",
+          "id": "logbook",
+          "name": "logbook",
+          "description": "a water damaged logbook"
+        },
+        {
+          "kind": "plain",
+          "id": "cipher_a",
+          "name": "cipher card A",
+          "description": "half a punched card"
+        }
+      ]
+    },
+    {
+      "id": "workshop",
+      "name": "Workshop",
+      "description": "A bench, a vice, and a lever set into the wall.",
+      "exits": {
+        "east": "reception",
+        "south": "generator_room",
+        "north": "stairwell"
+      },
+      "items": [
+        {
+          "kind": "plain",
+          "id": "crowbar",
+          "name": "crowbar",
+          "description": "a heavy crowbar"
+        },
+        {
+          "kind": "plain",
+          "id": "crank_handle",
+          "name": "crank handle",
+          "description": "an iron crank handle"
+        }
+      ]
+    },
+    {
+      "id": "generator_room",
+      "name": "Generator Room",
+      "description": "The generator is silent. A second lever waits beside it.",
+      "exits": {
+        "north": "workshop"
+      },
+      "items": [
+        {
+          "kind": "plain",
+          "id": "fuse",
+          "name": "fuse",
+          "description": "a ceramic fuse, unbroken"
+        },
+        {
+          "kind": "plain",
+          "id": "lantern_oil",
+          "name": "lantern oil",
+          "description": "a half tin of lantern oil"
+        }
+      ]
+    },
+    {
+      "id": "stairwell",
+      "name": "Stairwell",
+      "description": "Iron stairs. A counterweighted platform blocks the way up.",
+      "exits": {
+        "south": "workshop",
+        "up": "dome"
+      },
+      "items": [
+        {
+          "kind": "plain",
+          "id": "rope",
+          "name": "rope",
+          "description": "a coil of rope, stiff with age"
+        }
+      ]
+    },
+    {
+      "id": "dome",
+      "name": "Observation Dome",
+      "description": "The telescope points at a closed shutter.",
+      "exits": {
+        "down": "stairwell",
+        "out": "roof_walk"
+      },
+      "items": [
+        {
+          "kind": "plain",
+          "id": "cipher_b",
+          "name": "cipher card B",
+          "description": "the other half of a punched card"
+        },
+        {
+          "kind": "plain",
+          "id": "lens",
+          "name": "lens",
+          "description": "a lens in a felt bag"
+        }
+      ]
+    },
+    {
+      "id": "roof_walk",
+      "name": "Roof Walk",
+      "description": "A narrow walkway. From here you can see the whole coast.",
+      "exits": {
+        "in": "dome"
+      },
+      "items": []
+    }
+  ],
+  "doors": [
+    {
+      "id": "dome_hatch",
+      "name": "hatch",
+      "key": "brass_key",
+      "sides": [
+        {
+          "room": "stairwell",
+          "direction": "up"
+        },
+        {
+          "room": "dome",
+          "direction": "down"
+        }
+      ]
+    }
+  ]
+}
