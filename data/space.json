@@ -1,0 +1,24 @@
+{
+  "start": "earth",
+  "rooms": [
+    {
+      "id": "earth",
+      "name": "Earth",
+      "description": "Our home planet. Iron, wood and water can be gathered here.",
+      "exits": { "moon": "moon", "mars": "mars" }
+    },
+    {
+      "id": "moon",
+      "name": "The Moon",
+      "description": "Earth's only natural satellite, grey and airless.",
+      "exits": { "earth": "earth" }
+    },
+    {
+      "id": "mars",
+      "name": "Mars",
+      "description": "The red planet. Nickel can be mined here.",
+      "exits": { "earth": "earth" }
+    }
+  ],
+  "doors": []
+}
