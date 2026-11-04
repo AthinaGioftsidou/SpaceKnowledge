@@ -1,0 +1,61 @@
+"""The two messages that cross between the Broker and the Universe."""
+
+from observatory.common.refusal import Refusal
+
+
+class Request:
+    """What the Broker asks the Universe to do. Read-only once made."""
+
+    def __init__(self, op_id: str, action: str, player_id: str, item_id: str) -> None:
+        if not op_id:
+            raise ValueError("op_id must not be empty")
+        if not action:
+            raise ValueError("action must not be empty")
+        if not player_id:
+            raise ValueError("player_id must not be empty")
+        if not item_id:
+            raise ValueError("item_id must not be empty")
+        self._op_id = op_id
+        self._action = action
+        self._player_id = player_id
+        self._item_id = item_id
+
+    @property
+    def op_id(self) -> str:
+        return self._op_id
+
+    @property
+    def action(self) -> str:
+        return self._action
+
+    @property
+    def player_id(self) -> str:
+        return self._player_id
+
+    @property
+    def item_id(self) -> str:
+        return self._item_id
+
+
+class Response:
+    """The Universe's answer: OK, or a Refusal that says why not."""
+
+    def __init__(self, op_id: str, refusal: Refusal | None = None) -> None:
+        if not op_id:
+            raise ValueError("op_id must not be empty")
+        if refusal is not None and not isinstance(refusal, Refusal):
+            raise TypeError(f"refusal must be a Refusal, not {type(refusal).__name__}")
+        self._op_id = op_id
+        self._refusal = refusal
+
+    @property
+    def op_id(self) -> str:
+        return self._op_id
+
+    @property
+    def ok(self) -> bool:
+        return self._refusal is None
+
+    @property
+    def refusal(self) -> Refusal | None:
+        return self._refusal
