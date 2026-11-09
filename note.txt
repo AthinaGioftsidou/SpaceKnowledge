@@ -1,0 +1,10 @@
+Project: Space Knowledge (CS412 final project), Python 3.14, standard library only.
+Design: Broker server (login, inventory, item states) and Universe server (world, tick),
+client talks only to the Broker. Two threads in one process for now.
+Done so far: reused Observatory world code (107 tests), Refusal, Request/Response,
+InventoryEntry with Owned/BeingDropped/Dropped states, PlayerInventory,
+data/space.json (Earth, Moon, Mars) with test.
+Next: finish Universe class (place_player, handle add_item, repeated op_id returns
+same answer), then Broker drop flow, then connect the two.
+Rules: explain every piece of code line by line; write the test first; commit after
+each step; keep a prompts.md for the AI-use declaration.

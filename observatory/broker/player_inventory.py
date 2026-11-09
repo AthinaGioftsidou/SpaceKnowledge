@@ -32,7 +32,7 @@ class PlayerInventory:
 
     def entries(self) -> list[InventoryEntry]:
         """A copy, so callers cannot change the real list."""
-        return list(self._entries)
+        return self._entries.copy()
 
     def check_usable(self, item_id: str) -> Refusal | None:
         """None if the player may use the item now, otherwise why not."""
