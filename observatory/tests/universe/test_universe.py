@@ -83,6 +83,31 @@ class TestArgumentTypes(unittest.TestCase):
                 with self.assertRaisesRegex(TypeError, "must be"):
                     call()
 
+from pathlib import Path
+
+from observatory.world.loader import StandardWorldLoader
+
+
+SPACE_FILE = Path(__file__).resolve().parents[3] / "data" / "space.json"
+
+
+class TestTheUniverseOnTheSpaceWorld(unittest.TestCase):
+    def setUp(self) -> None:
+        world = StandardWorldLoader().load(SPACE_FILE)
+        self.universe = Universe(world)
+        self.earth = world.room("earth")
+        self.universe.place_player("ada", "earth")
+
+    def test_a_dropped_item_lands_on_earth(self) -> None:
+        response = self.universe.handle(add_torch())
+        self.assertTrue(response.ok)
+        self.assertIsNotNone(self.earth.find_item("torch"))
+
+    def test_a_player_on_mars_drops_it_on_mars_not_on_earth(self) -> None:
+        self.universe.place_player("bob", "mars")
+        self.universe.handle(add_torch("op1", "bob"))
+        self.assertIsNotNone(self.universe._world.room("mars").find_item("torch"))
+        self.assertIsNone(self.earth.find_item("torch"))
 
 if __name__ == "__main__":
     unittest.main()
