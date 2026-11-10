@@ -110,6 +110,25 @@ class TestRestart(unittest.TestCase):
         self.assertIsNotNone(again.inventory_of("ada").find("torch"))
         self.assertEqual(2, again.resources_of("ada").amount_of("iron"))
 
+class TestOpIdsAcrossRuns(unittest.TestCase):
+    def test_a_restarted_broker_does_not_reuse_old_operation_ids(self) -> None:
+        # The Universe remembers answers by op_id. If a new run started again
+        # at op1, its first mine would get the old run's answer and mine nothing.
+        earth = Room("earth", "Earth", "Home.")
+        deposits = Deposits({"earth": {"iron": 10}})
+        universe = Universe(World({"earth": earth}, "earth"), deposits)
+        universe.place_player("ada", "earth")
+        repository = InMemoryInventoryRepository()
+
+        first = Broker(InMemoryChannel(universe), repository)
+        first.add_player("ada")
+        first.mine("ada", "iron", 3)
+
+        second = Broker(InMemoryChannel(universe), repository)
+        second.mine("ada", "iron", 3)
+
+        self.assertEqual(4, deposits.available("earth", "iron"))
+        self.assertEqual(6, second.resources_of("ada").amount_of("iron"))
 
 if __name__ == "__main__":
     unittest.main()

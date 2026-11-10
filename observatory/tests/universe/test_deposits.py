@@ -91,6 +91,25 @@ class TestReadingFromRawData(unittest.TestCase):
         self.assertEqual(500, deposits.available("earth", "iron"))
         self.assertEqual(200, deposits.available("mars", "nickel"))
 
+class TestRestore(unittest.TestCase):
+    def test_restore_replaces_everything(self) -> None:
+        deposits = some_deposits()
+        deposits.restore({"venus": {"gold": 2}})
+        self.assertEqual(2, deposits.available("venus", "gold"))
+        self.assertEqual(0, deposits.available("earth", "iron"))
+
+    def test_a_bad_restore_changes_nothing(self) -> None:
+        deposits = some_deposits()
+        with self.assertRaises(ValueError):
+            deposits.restore({"earth": {"iron": -1}})
+        self.assertEqual(10, deposits.available("earth", "iron"))
+
+    def test_the_restored_data_is_copied(self) -> None:
+        stock = {"earth": {"iron": 5}}
+        deposits = some_deposits()
+        deposits.restore(stock)
+        stock["earth"]["iron"] = 999
+        self.assertEqual(5, deposits.available("earth", "iron"))
 
 if __name__ == "__main__":
     unittest.main()

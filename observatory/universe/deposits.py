@@ -56,3 +56,8 @@ class Deposits:
     def snapshot(self) -> Stock:
         """A copy of everything, for saving later."""
         return {room_id: dict(resources) for room_id, resources in self._stock.items()}
+
+    def restore(self, stock: Stock) -> None:
+        """Replace everything with `stock`, checked like a new Deposits.
+        If `stock` is bad this raises and the old stock is kept."""
+        self._stock = Deposits(stock)._stock

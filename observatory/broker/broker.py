@@ -13,6 +13,7 @@ from observatory.broker.resource_bag import ResourceBag
 from observatory.common.messages import Request
 from observatory.common.refusal import Refusal
 from observatory.transport.channel import UniverseChannel
+from uuid import uuid4
 
 
 class Broker:
@@ -36,6 +37,7 @@ class Broker:
         self._repository = repository if repository is not None else InMemoryInventoryRepository()
         self._inventories: dict[str, PlayerInventory] = {}
         self._resources: dict[str, ResourceBag] = {}
+        self._run_id = uuid4().hex[:8]
         self._op_numbers = count(1)
         self._restore()
 
@@ -109,7 +111,9 @@ class Broker:
         )
 
     def _next_op_id(self) -> str:
-        return f"op{next(self._op_numbers)}"
+        """Unique across runs: the Universe remembers answers by op_id, so a
+        restarted Broker counting from 1 again would be told old answers."""
+        return f"{self._run_id}-op{next(self._op_numbers)}"
 
     def _restore(self) -> None:
         resources = self._repository.load_resources()
