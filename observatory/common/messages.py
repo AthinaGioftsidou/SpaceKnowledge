@@ -6,7 +6,9 @@ from observatory.common.refusal import Refusal
 class Request:
     """What the Broker asks the Universe to do. Read-only once made."""
 
-    def __init__(self, op_id: str, action: str, player_id: str, item_id: str) -> None:
+    def __init__(
+        self, op_id: str, action: str, player_id: str, item_id: str, amount: int = 1
+    ) -> None:
         if not op_id:
             raise ValueError("op_id must not be empty")
         if not action:
@@ -15,10 +17,15 @@ class Request:
             raise ValueError("player_id must not be empty")
         if not item_id:
             raise ValueError("item_id must not be empty")
+        if isinstance(amount, bool) or not isinstance(amount, int):
+            raise TypeError(f"amount must be an int, not {type(amount).__name__}")
+        if amount < 1:
+            raise ValueError("amount must be at least 1")
         self._op_id = op_id
         self._action = action
         self._player_id = player_id
         self._item_id = item_id
+        self._amount = amount
 
     @property
     def op_id(self) -> str:
@@ -36,6 +43,9 @@ class Request:
     def item_id(self) -> str:
         return self._item_id
 
+    @property
+    def amount(self) -> int:
+        return self._amount
 
 class Response:
     """The Universe's answer: OK, or a Refusal that says why not."""

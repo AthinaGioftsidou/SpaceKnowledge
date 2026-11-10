@@ -6,6 +6,7 @@ from observatory.common.messages import Request, Response
 from observatory.universe.universe import Universe
 from observatory.world.room import Room
 from observatory.world.world import World
+from observatory.universe.deposits import Deposits
 
 
 def a_universe() -> tuple[Universe, Room]:
@@ -108,6 +109,64 @@ class TestTheUniverseOnTheSpaceWorld(unittest.TestCase):
         self.universe.handle(add_torch("op1", "bob"))
         self.assertIsNotNone(self.universe._world.room("mars").find_item("torch"))
         self.assertIsNone(self.earth.find_item("torch"))
+
+def a_mining_universe() -> tuple[Universe, Deposits]:
+    earth = Room("earth", "Earth", "Home.")
+    mars = Room("mars", "Mars", "Red.")
+    deposits = Deposits({"earth": {"iron": 10}, "mars": {"nickel": 4}})
+    universe = Universe(World({"earth": earth, "mars": mars}, "earth"), deposits)
+    universe.place_player("ada", "earth")
+    universe.place_player("bob", "mars")
+    return universe, deposits
+
+
+def mine(op_id: str = "op1", resource: str = "iron", amount: int = 3,
+         player_id: str = "ada") -> Request:
+    return Request(op_id, "mine", player_id, resource, amount)
+
+
+class TestMining(unittest.TestCase):
+    def test_mining_succeeds_and_reduces_the_stock(self) -> None:
+        universe, deposits = a_mining_universe()
+        self.assertTrue(universe.handle(mine()).ok)
+        self.assertEqual(7, deposits.available("earth", "iron"))
+
+    def test_asking_for_more_than_is_left_is_refused_and_says_how_much_is_left(self) -> None:
+        universe, deposits = a_mining_universe()
+        response = universe.handle(mine(amount=11))
+        self.assertFalse(response.ok)
+        self.assertIn("only 10", response.refusal.describe())
+        self.assertEqual(10, deposits.available("earth", "iron"))
+
+    def test_a_resource_that_is_not_here_is_refused(self) -> None:
+        universe, deposits = a_mining_universe()
+        response = universe.handle(mine(resource="nickel"))
+        self.assertFalse(response.ok)
+        self.assertIn("Earth", response.refusal.describe())
+
+    def test_a_player_who_is_nowhere_is_refused_and_nothing_is_mined(self) -> None:
+        universe, deposits = a_mining_universe()
+        response = universe.handle(mine(player_id="eve"))
+        self.assertFalse(response.ok)
+        self.assertEqual(10, deposits.available("earth", "iron"))
+
+    def test_players_mine_where_they_are(self) -> None:
+        universe, deposits = a_mining_universe()
+        self.assertTrue(universe.handle(mine("op1", "nickel", 2, "bob")).ok)
+        self.assertEqual(2, deposits.available("mars", "nickel"))
+        self.assertEqual(10, deposits.available("earth", "iron"))
+
+    def test_a_repeated_op_id_mines_only_once(self) -> None:
+        universe, deposits = a_mining_universe()
+        first = universe.handle(mine("op1"))
+        second = universe.handle(mine("op1"))
+        self.assertIs(first, second)
+        self.assertEqual(7, deposits.available("earth", "iron"))
+
+    def test_a_string_is_refused_where_deposits_are_expected(self) -> None:
+        room = Room("earth", "Earth", "Home.")
+        with self.assertRaisesRegex(TypeError, "must be"):
+            Universe(World({"earth": room}, "earth"), "iron")  # type: ignore[arg-type]
 
 if __name__ == "__main__":
     unittest.main()

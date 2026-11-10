@@ -42,6 +42,25 @@ class TestResponse(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "must be"):
             Response("op1", "not a refusal")  # type: ignore[arg-type]
 
+class TestRequestAmount(unittest.TestCase):
+    def test_the_amount_defaults_to_one(self) -> None:
+        self.assertEqual(1, Request("op1", "add_item", "ada", "torch").amount)
+
+    def test_an_amount_is_kept(self) -> None:
+        self.assertEqual(5, Request("op1", "mine", "ada", "iron", 5).amount)
+
+    def test_an_amount_below_one_is_refused(self) -> None:
+        for amount in (0, -3):
+            with self.subTest(amount=amount):
+                with self.assertRaises(ValueError):
+                    Request("op1", "mine", "ada", "iron", amount)
+
+    def test_an_amount_that_is_not_a_whole_number_is_refused(self) -> None:
+        for amount in (2.5, "5", True):
+            with self.subTest(amount=amount):
+                with self.assertRaisesRegex(TypeError, "must be"):
+                    Request("op1", "mine", "ada", "iron", amount)  # type: ignore[arg-type]
+
 
 if __name__ == "__main__":
     unittest.main()

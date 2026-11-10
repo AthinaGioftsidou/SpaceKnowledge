@@ -5,19 +5,22 @@
       "id": "earth",
       "name": "Earth",
       "description": "Our home planet. Iron, wood and water can be gathered here.",
-      "exits": { "moon": "moon", "mars": "mars" }
+      "exits": { "moon": "moon", "mars": "mars" },
+      "resources": { "iron": 500, "wood": 300, "water": 800 }
     },
     {
       "id": "moon",
       "name": "The Moon",
       "description": "Earth's only natural satellite, grey and airless.",
-      "exits": { "earth": "earth" }
+      "exits": { "earth": "earth" },
+      "resources": { "helium_3": 100 }
     },
     {
       "id": "mars",
       "name": "Mars",
       "description": "The red planet. Nickel can be mined here.",
-      "exits": { "earth": "earth" }
+      "exits": { "earth": "earth" },
+      "resources": { "nickel": 200 }
     }
   ],
   "doors": []
