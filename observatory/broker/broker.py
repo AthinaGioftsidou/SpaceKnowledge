@@ -3,6 +3,10 @@
 from itertools import count
 
 from observatory.broker.inventory_entry import InventoryEntry
+from observatory.broker.inventory_repository import (
+    InMemoryInventoryRepository,
+    InventoryRepository,
+)
 from observatory.broker.player_inventory import PlayerInventory
 from observatory.common.messages import Request
 from observatory.common.refusal import Refusal
@@ -11,14 +15,26 @@ from observatory.transport.channel import UniverseChannel
 
 class Broker:
     """Holds each player's inventory. Never touches the world directly:
-    every change to the world goes through the channel as a Request."""
+    every change to the world goes through the channel as a Request.
 
-    def __init__(self, channel: UniverseChannel) -> None:
+    Loads its players from the repository when it starts, and saves after
+    every change that is final.
+    """
+
+    def __init__(
+        self, channel: UniverseChannel, repository: InventoryRepository | None = None
+    ) -> None:
         if not isinstance(channel, UniverseChannel):
             raise TypeError(f"channel must be a UniverseChannel, not {type(channel).__name__}")
+        if repository is not None and not isinstance(repository, InventoryRepository):
+            raise TypeError(
+                f"repository must be an InventoryRepository, not {type(repository).__name__}"
+            )
         self._channel = channel
+        self._repository = repository if repository is not None else InMemoryInventoryRepository()
         self._inventories: dict[str, PlayerInventory] = {}
         self._op_numbers = count(1)
+        self._restore()
 
     def add_player(self, player_id: str) -> None:
         if not player_id:
@@ -26,6 +42,7 @@ class Broker:
         if player_id in self._inventories:
             raise ValueError(f"player {player_id} already exists")
         self._inventories[player_id] = PlayerInventory()
+        self._save()
 
     def inventory_of(self, player_id: str) -> PlayerInventory:
         """Raises KeyError for an unknown player."""
@@ -35,6 +52,7 @@ class Broker:
         if not isinstance(entry, InventoryEntry):
             raise TypeError(f"entry must be an InventoryEntry, not {type(entry).__name__}")
         self.inventory_of(player_id).add(entry)
+        self._save()
 
     def drop(self, player_id: str, item_id: str) -> Refusal | None:
         """None if the item is now in the world, otherwise why not."""
@@ -52,9 +70,23 @@ class Broker:
         response = self._channel.send(request)
         if response.ok:
             inventory.finish_drop(item_id)
+            self._save()
             return None
         inventory.cancel_drop(item_id)
         return response.refusal
 
     def _next_op_id(self) -> str:
         return f"op{next(self._op_numbers)}"
+
+    def _restore(self) -> None:
+        for player_id, records in self._repository.load().items():
+            inventory = PlayerInventory()
+            for item_id, name in records:
+                inventory.add(InventoryEntry(item_id, name))
+            self._inventories[player_id] = inventory
+
+    def _save(self) -> None:
+        snapshot: dict[str, list[tuple[str, str]]] = {}
+        for player_id, inventory in self._inventories.items():
+            snapshot[player_id] = [(entry.item_id, entry.name) for entry in inventory.entries()]
+        self._repository.save(snapshot)
