@@ -19,20 +19,23 @@ class InventoryCommand(Command):
         if not isinstance(broker, Broker):
             raise TypeError(f"broker must be a Broker, not {type(broker).__name__}")
         try:
-            inventory = broker.inventory_of(player_id)
+            entries = broker.inventory_of(player_id).entries()
+            resources = broker.resources_of(player_id).snapshot()
         except KeyError:
             return Refusal(
                 "show the inventory",
                 f"the Broker does not know a player called {player_id}",
                 "log in, then try again",
             ).describe()
-        entries = inventory.entries()
-        if len(entries) == 0:
+        lines = []
+        if entries:
+            lines.append("You are carrying: " + ", ".join(entry.name for entry in entries))
+        if resources:
+            parts = [f"{name} {amount}" for name, amount in sorted(resources.items())]
+            lines.append("Resources: " + ", ".join(parts))
+        if not lines:
             return "You are carrying nothing."
-        names = []
-        for entry in entries:
-            names.append(entry.name)
-        return "You are carrying: " + ", ".join(names)
+        return "\n".join(lines)
 
 
 class DropCommand(Command):
@@ -48,3 +51,31 @@ class DropCommand(Command):
         if refusal is not None:
             return refusal.describe()
         return f"You drop the {self._target}."
+
+
+class MineCommand(Command):
+    def __init__(self, resource: str, amount: int = 1) -> None:
+        if not resource:
+            raise ValueError("resource must not be empty")
+        if isinstance(amount, bool) or not isinstance(amount, int):
+            raise TypeError(f"amount must be an int, not {type(amount).__name__}")
+        if amount < 1:
+            raise ValueError("amount must be at least 1")
+        self._resource = resource
+        self._amount = amount
+
+    @property
+    def resource(self) -> str:
+        return self._resource
+
+    @property
+    def amount(self) -> int:
+        return self._amount
+
+    def execute(self, broker: Broker, player_id: str) -> str:
+        if not isinstance(broker, Broker):
+            raise TypeError(f"broker must be a Broker, not {type(broker).__name__}")
+        refusal = broker.mine(player_id, self._resource, self._amount)
+        if refusal is not None:
+            return refusal.describe()
+        return f"You mine {self._amount} {self._resource}."

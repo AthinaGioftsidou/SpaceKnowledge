@@ -10,6 +10,7 @@ from observatory.transport.channel import InMemoryChannel
 from observatory.universe.universe import Universe
 from observatory.world.room import Room
 from observatory.world.world import World
+from observatory.universe.deposits import Deposits
 
 
 def a_session() -> tuple[Session, Room]:
@@ -60,6 +61,17 @@ class TestSession(unittest.TestCase):
                 with self.assertRaisesRegex(TypeError, "must be"):
                     call()
 
+class TestSessionMining(unittest.TestCase):
+    def test_a_typed_mine_works_from_text_to_the_bag(self) -> None:
+        earth = Room("earth", "Earth", "Home.")
+        universe = Universe(World({"earth": earth}, "earth"), Deposits({"earth": {"iron": 10}}))
+        universe.place_player("ada", "earth")
+        broker = Broker(InMemoryChannel(universe))
+        broker.add_player("ada")
+        session = Session(broker, Parser(), "ada")
+        self.assertEqual("You mine 3 iron.", session.submit("mine iron 3"))
+        self.assertIn("iron 3", session.submit("inventory"))
+        self.assertIn("mine", session.submit("help"))
 
 if __name__ == "__main__":
     unittest.main()

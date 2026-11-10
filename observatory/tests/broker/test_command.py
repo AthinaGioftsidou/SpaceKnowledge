@@ -9,6 +9,8 @@ from observatory.transport.channel import InMemoryChannel
 from observatory.universe.universe import Universe
 from observatory.world.room import Room
 from observatory.world.world import World
+from observatory.broker.command import Command, DropCommand, InventoryCommand, MineCommand
+from observatory.universe.deposits import Deposits
 
 
 def a_setup() -> tuple[Broker, Room]:
@@ -71,6 +73,51 @@ class TestArgumentTypes(unittest.TestCase):
                 with self.assertRaisesRegex(TypeError, "must be"):
                     call()
 
+
+def a_mining_broker() -> Broker:
+    earth = Room("earth", "Earth", "Home.")
+    universe = Universe(World({"earth": earth}, "earth"), Deposits({"earth": {"iron": 10}}))
+    universe.place_player("ada", "earth")
+    broker = Broker(InMemoryChannel(universe))
+    broker.add_player("ada")
+    return broker
+
+
+class TestMineCommand(unittest.TestCase):
+    def test_a_successful_mine_is_reported(self) -> None:
+        broker = a_mining_broker()
+        self.assertEqual("You mine 3 iron.", MineCommand("iron", 3).execute(broker, "ada"))
+
+    def test_a_refused_mine_explains_itself(self) -> None:
+        text = MineCommand("iron", 11).execute(a_mining_broker(), "ada")
+        self.assertIn("only 10", text)
+        self.assertIn("Next:", text)
+
+    def test_the_inventory_shows_resources(self) -> None:
+        broker = a_mining_broker()
+        MineCommand("iron", 3).execute(broker, "ada")
+        self.assertEqual("Resources: iron 3", InventoryCommand().execute(broker, "ada"))
+
+    def test_the_inventory_shows_items_and_resources(self) -> None:
+        broker = a_mining_broker()
+        broker.give("ada", InventoryEntry("torch", "torch"))
+        MineCommand("iron", 3).execute(broker, "ada")
+        self.assertEqual(
+            "You are carrying: torch\nResources: iron 3",
+            InventoryCommand().execute(broker, "ada"),
+        )
+
+    def test_a_bad_construction_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            MineCommand("")
+        with self.assertRaises(ValueError):
+            MineCommand("iron", 0)
+        with self.assertRaisesRegex(TypeError, "must be"):
+            MineCommand("iron", 2.5)  # type: ignore[arg-type]
+
+    def test_a_string_is_refused_where_a_broker_is_expected(self) -> None:
+        with self.assertRaisesRegex(TypeError, "must be"):
+            MineCommand("iron").execute("not an object", "ada")  # type: ignore[arg-type]
 
 if __name__ == "__main__":
     unittest.main()

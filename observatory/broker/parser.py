@@ -1,6 +1,6 @@
 """Turning what a player typed into a Command."""
 
-from observatory.broker.command import Command, DropCommand, InventoryCommand
+from observatory.broker.command import Command, DropCommand, InventoryCommand, MineCommand
 
 
 class ParseError(Exception):
@@ -17,6 +17,11 @@ _ONE_ARGUMENT = {
     "drop": DropCommand,
 }
 
+# A name, then an optional whole number: "mine iron 3".
+_WITH_AMOUNT = {
+    "mine": MineCommand,
+}
+
 _ARTICLES = ("the ", "a ", "an ")
 
 
@@ -27,21 +32,38 @@ class Parser:
         words = line.strip().lower().split()
         if not words:
             raise ParseError("nothing was typed")
-        verb, rest = words[0], " ".join(words[1:])
+        verb, rest = words[0], words[1:]
         if verb in _NO_ARGUMENT:
             if rest:
                 raise ParseError(f"'{verb}' does not take anything after it")
             return _NO_ARGUMENT[verb]()
         if verb in _ONE_ARGUMENT:
-            if not rest:
-                raise ParseError(f"'{verb}' needs to know which item")
-            for article in _ARTICLES:
-                if rest.startswith(article):
-                    rest = rest[len(article):]
-                    break
-            return _ONE_ARGUMENT[verb](rest)
+            return _ONE_ARGUMENT[verb](self._name(verb, rest, "item"))
+        if verb in _WITH_AMOUNT:
+            return self._parse_with_amount(verb, rest)
         raise ParseError(f"there is no verb called '{verb}'")
 
     def verbs(self) -> list[str]:
         """Every word the parser accepts, so help cannot drift from it."""
-        return sorted(set(_NO_ARGUMENT) | set(_ONE_ARGUMENT))
+        return sorted(set(_NO_ARGUMENT) | set(_ONE_ARGUMENT) | set(_WITH_AMOUNT))
+
+    def _parse_with_amount(self, verb: str, words: list[str]) -> Command:
+        amount = 1
+        if words and words[-1].isdecimal():
+            amount = int(words[-1])
+            words = words[:-1]
+        name = self._name(verb, words, "resource")
+        if amount < 1:
+            raise ParseError("the amount must be at least 1")
+        return _WITH_AMOUNT[verb](name, amount)
+
+    @staticmethod
+    def _name(verb: str, words: list[str], noun: str) -> str:
+        """The words joined into one name, with a leading article removed."""
+        text = " ".join(words)
+        if not text:
+            raise ParseError(f"'{verb}' needs to know which {noun}")
+        for article in _ARTICLES:
+            if text.startswith(article):
+                return text[len(article):]
+        return text
