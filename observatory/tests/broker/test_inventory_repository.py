@@ -80,7 +80,7 @@ class TestJson(unittest.TestCase):
         bad_files = [
             "{not json",
             "[]",
-            '{"version": 3, "players": {}}',
+            '{"version": 4, "players": {}}',
             '{"version": 1, "players": []}',
             '{"version": 1, "players": {"ada": "torch"}}',
             '{"version": 1, "players": {"ada": [{"id": "torch"}]}}',

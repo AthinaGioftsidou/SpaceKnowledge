@@ -59,10 +59,10 @@ class TestJsonResources(unittest.TestCase):
         self.assertEqual(ITEMS, self.repository.load())
         self.assertEqual(RESOURCES, self.repository.load_resources())
 
-    def test_saving_writes_a_version_2_file(self) -> None:
+    def test_saving_writes_a_version_3_file(self) -> None:
         self.repository.save(ITEMS, RESOURCES)
         document = json.loads(self.path.read_text(encoding="utf-8"))
-        self.assertEqual(2, document["version"])
+        self.assertEqual(3, document["version"])
 
     def test_a_version_1_file_is_still_read_with_empty_bags(self) -> None:
         self.path.write_text(

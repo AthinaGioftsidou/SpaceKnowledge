@@ -2,26 +2,29 @@
 for every change to the world."""
 
 from itertools import count
+from uuid import uuid4
 
 from observatory.broker.inventory_entry import InventoryEntry
 from observatory.broker.inventory_repository import (
+    CorruptStoreError,
     InMemoryInventoryRepository,
     InventoryRepository,
 )
 from observatory.broker.player_inventory import PlayerInventory
 from observatory.broker.resource_bag import ResourceBag
-from observatory.common.messages import Request
+from observatory.common.messages import Request, Response
 from observatory.common.refusal import Refusal
 from observatory.transport.channel import UniverseChannel
-from uuid import uuid4
 
 
 class Broker:
     """Holds each player's inventory and resource bag. Never touches the world
     directly: every change to the world goes through the channel as a Request.
 
-    Loads its players from the repository when it starts, and saves after
-    every change that is final.
+    Every request is written down as "pending" BEFORE it is sent, and crossed
+    off only when its answer has been applied. After a crash, `recover` sends
+    the unfinished ones again with their original op_id, and the Universe's
+    remembered answers make that safe.
     """
 
     def __init__(
@@ -37,6 +40,7 @@ class Broker:
         self._repository = repository if repository is not None else InMemoryInventoryRepository()
         self._inventories: dict[str, PlayerInventory] = {}
         self._resources: dict[str, ResourceBag] = {}
+        self._pending: dict[str, Request] = {}
         self._run_id = uuid4().hex[:8]
         self._op_numbers = count(1)
         self._restore()
@@ -72,14 +76,7 @@ class Broker:
         refusal = inventory.begin_drop(item_id)
         if refusal is not None:
             return refusal
-        request = Request(self._next_op_id(), "add_item", player_id, item_id)
-        response = self._channel.send(request)
-        if response.ok:
-            inventory.finish_drop(item_id)
-            self._save()
-            return None
-        inventory.cancel_drop(item_id)
-        return response.refusal
+        return self._send(Request(self._next_op_id(), "add_item", player_id, item_id))
 
     def mine(self, player_id: str, resource: str, amount: int) -> Refusal | None:
         """None if the resource is now in the player's bag, otherwise why not.
@@ -88,20 +85,57 @@ class Broker:
         """
         if isinstance(amount, bool) or not isinstance(amount, int):
             raise TypeError(f"amount must be an int, not {type(amount).__name__}")
-        bag = self._resources.get(player_id)
-        if bag is None:
+        if player_id not in self._resources:
             return self._unknown_player(f"mine {resource}", player_id)
         if amount < 1:
             return Refusal(
                 f"mine {resource}", "the amount must be at least 1", "ask for 1 or more"
             )
-        request = Request(self._next_op_id(), "mine", player_id, resource, amount)
+        return self._send(Request(self._next_op_id(), "mine", player_id, resource, amount))
+
+    def pending_count(self) -> int:
+        """How many operations were sent and have not been settled yet."""
+        return len(self._pending)
+
+    def recover(self) -> int:
+        """Send every unfinished operation again, with its original op_id.
+
+        Call this once after starting. Returns how many were settled. If the
+        channel fails, the rest stay pending and `recover` can be called again.
+        """
+        settled = 0
+        for request in list(self._pending.values()):
+            self._settle(request, self._channel.send(request))
+            settled += 1
+        return settled
+
+    def _send(self, request: Request) -> Refusal | None:
+        """Write the intention down, ask the Universe, then settle."""
+        self._pending[request.op_id] = request
+        try:
+            self._save()
+        except OSError:
+            # Not on disk, so it must not be sent: take the intention back.
+            del self._pending[request.op_id]
+            if request.action == "add_item":
+                self._inventories[request.player_id].cancel_drop(request.item_id)
+            raise
         response = self._channel.send(request)
-        if not response.ok:
-            return response.refusal
-        bag.add(resource, amount)
+        return self._settle(request, response)
+
+    def _settle(self, request: Request, response: Response) -> Refusal | None:
+        """Apply the answer, cross the intention off, and save both together."""
+        if request.action == "add_item":
+            inventory = self._inventories[request.player_id]
+            if response.ok:
+                inventory.finish_drop(request.item_id)
+            else:
+                inventory.cancel_drop(request.item_id)
+        elif response.ok:
+            self._resources[request.player_id].add(request.item_id, request.amount)
+        del self._pending[request.op_id]
         self._save()
-        return None
+        return response.refusal
 
     def _unknown_player(self, what: str, player_id: str) -> Refusal:
         return Refusal(
@@ -126,10 +160,28 @@ class Broker:
                 bag.add(resource, amount)
             self._inventories[player_id] = inventory
             self._resources[player_id] = bag
+        for request in self._repository.load_pending():
+            self._restore_pending(request)
+
+    def _restore_pending(self, request: Request) -> None:
+        if request.action not in ("add_item", "mine"):
+            raise CorruptStoreError(
+                f"pending operation {request.op_id} has an unknown action {request.action}"
+            )
+        if request.action == "add_item":
+            # The saved item is still in the inventory, so mark it as being
+            # dropped again: it must stay unusable until the drop is settled.
+            refusal = self._inventories[request.player_id].begin_drop(request.item_id)
+            if refusal is not None:
+                raise CorruptStoreError(
+                    f"pending drop {request.op_id} names {request.item_id}, "
+                    f"which {request.player_id} cannot be dropping"
+                )
+        self._pending[request.op_id] = request
 
     def _save(self) -> None:
         items: dict[str, list[tuple[str, str]]] = {}
         for player_id, inventory in self._inventories.items():
             items[player_id] = [(entry.item_id, entry.name) for entry in inventory.entries()]
         bags = {player_id: bag.snapshot() for player_id, bag in self._resources.items()}
-        self._repository.save(items, bags)
+        self._repository.save(items, bags, list(self._pending.values()))
