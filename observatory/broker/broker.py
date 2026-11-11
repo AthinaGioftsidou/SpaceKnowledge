@@ -14,17 +14,21 @@ from observatory.broker.player_inventory import PlayerInventory
 from observatory.broker.resource_bag import ResourceBag
 from observatory.common.messages import Request, Response
 from observatory.common.refusal import Refusal
+from observatory.common.transition import DROP, MINE, Transition, TransitionKind
 from observatory.transport.channel import UniverseChannel
+
+# One row per action the Broker sends. Adding an action is one row.
+ACTION_KINDS: dict[str, TransitionKind] = {"add_item": DROP, "mine": MINE}
 
 
 class Broker:
     """Holds each player's inventory and resource bag. Never touches the world
     directly: every change to the world goes through the channel as a Request.
 
-    Every request is written down as "pending" BEFORE it is sent, and crossed
-    off only when its answer has been applied. After a crash, `recover` sends
-    the unfinished ones again with their original op_id, and the Universe's
-    remembered answers make that safe.
+    Every request is a Transition. It is begun and written down as "pending"
+    BEFORE it is sent, and confirmed or cancelled only when its answer has been
+    applied. After a crash, `recover` sends the unfinished ones again with
+    their original op_id, and the Universe's remembered answers make that safe.
     """
 
     def __init__(
@@ -41,6 +45,7 @@ class Broker:
         self._inventories: dict[str, PlayerInventory] = {}
         self._resources: dict[str, ResourceBag] = {}
         self._pending: dict[str, Request] = {}
+        self._flights: dict[str, Transition] = {}
         self._run_id = uuid4().hex[:8]
         self._op_numbers = count(1)
         self._restore()
@@ -53,6 +58,9 @@ class Broker:
         self._inventories[player_id] = PlayerInventory()
         self._resources[player_id] = ResourceBag()
         self._save()
+
+    def has_player(self, player_id: str) -> bool:
+        return player_id in self._inventories
 
     def inventory_of(self, player_id: str) -> PlayerInventory:
         """Raises KeyError for an unknown player."""
@@ -97,6 +105,11 @@ class Broker:
         """How many operations were sent and have not been settled yet."""
         return len(self._pending)
 
+    def in_flight_phases(self) -> list[str]:
+        """The phase name of every operation in flight, for tests and for the
+        admin view later. Empty when nothing is waiting for the Universe."""
+        return sorted(flight.phase_name() for flight in self._flights.values())
+
     def recover(self) -> int:
         """Send every unfinished operation again, with its original op_id.
 
@@ -109,14 +122,22 @@ class Broker:
             settled += 1
         return settled
 
+    def _begin_flight(self, request: Request) -> None:
+        flight = Transition(ACTION_KINDS[request.action], request.item_id)
+        flight.begin()
+        self._flights[request.op_id] = flight
+
     def _send(self, request: Request) -> Refusal | None:
-        """Write the intention down, ask the Universe, then settle."""
+        """Begin the transition, write the intention down, ask the Universe,
+        then settle."""
+        self._begin_flight(request)
         self._pending[request.op_id] = request
         try:
             self._save()
         except OSError:
             # Not on disk, so it must not be sent: take the intention back.
             del self._pending[request.op_id]
+            self._flights.pop(request.op_id).cancel()
             if request.action == "add_item":
                 self._inventories[request.player_id].cancel_drop(request.item_id)
             raise
@@ -124,7 +145,12 @@ class Broker:
         return self._settle(request, response)
 
     def _settle(self, request: Request, response: Response) -> Refusal | None:
-        """Apply the answer, cross the intention off, and save both together."""
+        """Apply the answer, finish the transition, and save both together."""
+        flight = self._flights.pop(request.op_id)
+        if response.ok:
+            flight.confirm()
+        else:
+            flight.cancel()
         if request.action == "add_item":
             inventory = self._inventories[request.player_id]
             if response.ok:
@@ -164,7 +190,7 @@ class Broker:
             self._restore_pending(request)
 
     def _restore_pending(self, request: Request) -> None:
-        if request.action not in ("add_item", "mine"):
+        if request.action not in ACTION_KINDS:
             raise CorruptStoreError(
                 f"pending operation {request.op_id} has an unknown action {request.action}"
             )
@@ -177,6 +203,7 @@ class Broker:
                     f"pending drop {request.op_id} names {request.item_id}, "
                     f"which {request.player_id} cannot be dropping"
                 )
+        self._begin_flight(request)
         self._pending[request.op_id] = request
 
     def _save(self) -> None:
