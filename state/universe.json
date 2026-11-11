@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "locations": {
+    "ada": "earth"
+  },
+  "stock": {
+    "earth": {
+      "iron": 494,
+      "wood": 300,
+      "water": 800
+    },
+    "moon": {
+      "helium_3": 100
+    },
+    "mars": {
+      "nickel": 200
+    }
+  },
+  "dropped": {
+    "earth": [
+      "torch"
+    ]
+  },
+  "answers": {
+    "40c74c51-op1": {
+      "ok": true
+    },
+    "40c74c51-op2": {
+      "ok": false,
+      "refusal": {
+        "what": "mine nickle",
+        "why": "there is no nickle to mine on Earth",
+        "next_step": "travel to a destination that has it, or mine something else"
+      }
+    },
+    "40c74c51-op3": {
+      "ok": true
+    },
+    "7a31534c-op1": {
+      "ok": true
+    }
+  }
+}
