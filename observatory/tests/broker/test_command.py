@@ -3,7 +3,7 @@
 import unittest
 
 from observatory.broker.broker import Broker
-from observatory.broker.command import Command, DropCommand, InventoryCommand
+from observatory.broker.command import Command, DropCommand, InventoryCommand, LookCommand, PickCommand
 from observatory.broker.inventory_entry import InventoryEntry
 from observatory.transport.channel import InMemoryChannel
 from observatory.universe.universe import Universe
@@ -118,6 +118,7 @@ class TestMineCommand(unittest.TestCase):
     def test_a_string_is_refused_where_a_broker_is_expected(self) -> None:
         with self.assertRaisesRegex(TypeError, "must be"):
             MineCommand("iron").execute("not an object", "ada")  # type: ignore[arg-type]
+
 
 if __name__ == "__main__":
     unittest.main()

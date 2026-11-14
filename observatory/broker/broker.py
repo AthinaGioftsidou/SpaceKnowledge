@@ -10,13 +10,16 @@ from observatory.broker.inventory_repository import (
     InMemoryInventoryRepository,
     InventoryRepository,
 )
+from observatory.broker.item_proxy import ItemProxy
 from observatory.broker.player_inventory import PlayerInventory
 from observatory.broker.resource_bag import ResourceBag
+from observatory.broker.universe_proxy import UniverseProxy
 from observatory.common.messages import Request, Response
 from observatory.common.refusal import Refusal
 from observatory.transport.channel import UniverseChannel
 
-ACTIONS = ("add_item", "mine", "join")
+# The actions the Broker saves as pending. Looking is not one: it changes nothing.
+ACTIONS = ("add_item", "mine", "join", "pick")
 
 # What a brand new player is given, so that `drop` has something to drop.
 STARTING_ITEMS = (("torch", "torch"),)
@@ -26,11 +29,13 @@ class Broker:
     """Holds each player's inventory and resource bag. Never touches the world
     directly: every change to the world goes through the channel as a Request.
 
-    A drop moves the item round its cycle: Owned, BeingDropped, and OnGround
-    once the Universe says yes. A mine has no phases: the Universe is asked,
-    and the bag grows only if it says yes.
+    A drop moves the item round its cycle (owned, flight, done) and the real
+    item then lives in the Universe. A pick goes through an ItemProxy: the
+    Universe is asked, and only on yes does the Broker create a real entry and
+    delete the proxy. A mine has no states: the bag grows only if the Universe
+    says yes.
 
-    Every request is written down as "pending" BEFORE it is sent, and crossed
+    Every change is written down as "pending" BEFORE it is sent, and crossed
     off only when its answer has been applied. After a crash, `recover` sends
     the unfinished ones again with their original op_id, and the Universe's
     remembered answers make that safe.
@@ -50,8 +55,10 @@ class Broker:
         self._inventories: dict[str, PlayerInventory] = {}
         self._resources: dict[str, ResourceBag] = {}
         self._pending: dict[str, Request] = {}
+        self._proxies: dict[str, ItemProxy] = {}  # op_id -> proxy of a pick in flight
         self._run_id = uuid4().hex[:8]
         self._op_numbers = count(1)
+        self._universe = UniverseProxy(channel, self._next_op_id, self._send)
         self._restore()
 
     def add_player(self, player_id: str) -> None:
@@ -80,6 +87,23 @@ class Broker:
         self.inventory_of(player_id).add(entry)
         self._save()
 
+    def join(self, player_id: str, destination: str) -> Refusal | None:
+        """Make sure the player exists here and has a place in the Universe.
+
+        A new player gets a record and the starting items. Joining again
+        changes nothing, because the Universe leaves a placed player where
+        they are. None if all is well, otherwise why not.
+        """
+        if not player_id:
+            raise ValueError("player_id must not be empty")
+        if not destination:
+            raise ValueError("destination must not be empty")
+        if player_id not in self._inventories:
+            self.add_player(player_id)
+            for item_id, name in STARTING_ITEMS:
+                self.give(player_id, InventoryEntry(item_id, name))
+        return self._send(Request(self._next_op_id(), "join", player_id, destination))
+
     def drop(self, player_id: str, item_id: str) -> Refusal | None:
         """None if the item is now in the world, otherwise why not."""
         inventory = self._inventories.get(player_id)
@@ -105,26 +129,39 @@ class Broker:
             )
         return self._send(Request(self._next_op_id(), "mine", player_id, resource, amount))
 
-    def join(self, player_id: str, destination: str) -> Refusal | None:
-        """Make sure the player exists here and has a place in the Universe.
-
-        A new player gets a record and the starting items. Joining again
-        changes nothing, because the Universe leaves a placed player where
-        they are. None if all is well, otherwise why not.
-        """
-        if not player_id:
-            raise ValueError("player_id must not be empty")
-        if not destination:
-            raise ValueError("destination must not be empty")
+    def look(self, player_id: str) -> list[ItemProxy] | Refusal:
+        """A proxy for each item lying where the player is. Changes nothing."""
         if player_id not in self._inventories:
-            self.add_player(player_id)
-            for item_id, name in STARTING_ITEMS:
-                self.give(player_id, InventoryEntry(item_id, name))
-        return self._send(Request(self._next_op_id(), "join", player_id, destination))
+            return self._unknown_player("look", player_id)
+        return self._universe.look(player_id)
+
+    def pick(self, player_id: str, term: str) -> Refusal | None:
+        """Pick up what lies here and is called `term` (an id or a name).
+        None if the item is now the player's, otherwise why not."""
+        inventory = self._inventories.get(player_id)
+        if inventory is None:
+            return self._unknown_player(f"pick up {term}", player_id)
+        seen = self._universe.look(player_id)
+        if isinstance(seen, Refusal):
+            return seen
+        chosen = self._choose(seen, term)
+        if isinstance(chosen, Refusal):
+            return chosen
+        if inventory.find(chosen.item_id) is not None:
+            return Refusal(
+                f"pick up {chosen.name}",
+                f"you already carry a {chosen.name}",
+                "drop yours first, or pick up something else",
+            )
+        return chosen.pick(player_id)
 
     def pending_count(self) -> int:
         """How many operations were sent and have not been settled yet."""
         return len(self._pending)
+
+    def picks_in_flight(self) -> list[str]:
+        """The state of every item proxy waiting for the Universe's answer."""
+        return sorted(proxy.state() for proxy in self._proxies.values())
 
     def recover(self) -> int:
         """Send every unfinished operation again, with its original op_id.
@@ -138,8 +175,32 @@ class Broker:
             settled += 1
         return settled
 
-    def _send(self, request: Request) -> Refusal | None:
+    @staticmethod
+    def _choose(seen: list[ItemProxy], term: str) -> ItemProxy | Refusal:
+        """The one proxy that `term` means: an id first, then a name."""
+        wanted = term.strip().lower()
+        by_id = [proxy for proxy in seen if proxy.item_id.lower() == wanted]
+        by_name = [proxy for proxy in seen if proxy.name.lower() == wanted]
+        matches = by_id or by_name
+        if not matches:
+            return Refusal(
+                f"pick up {term}",
+                f"there is no {term} on the ground here",
+                "type look to see what lies here",
+            )
+        if len(matches) > 1:
+            ids = ", ".join(sorted(proxy.item_id for proxy in matches))
+            return Refusal(
+                f"pick up {term}",
+                f"more than one thing is called {term}",
+                f"use one of these ids: {ids}",
+            )
+        return matches[0]
+
+    def _send(self, request: Request, proxy: ItemProxy | None = None) -> Refusal | None:
         """Write the intention down, ask the Universe, then settle."""
+        if proxy is not None:
+            self._proxies[request.op_id] = proxy
         self._pending[request.op_id] = request
         try:
             self._save()
@@ -148,6 +209,9 @@ class Broker:
             del self._pending[request.op_id]
             if request.action == "add_item":
                 self._inventories[request.player_id].cancel_drop(request.item_id)
+            waiting = self._proxies.pop(request.op_id, None)
+            if waiting is not None:
+                waiting.cancel_pick()
             raise
         response = self._channel.send(request)
         return self._settle(request, response)
@@ -160,11 +224,28 @@ class Broker:
                 inventory.finish_drop(request.item_id)
             else:
                 inventory.cancel_drop(request.item_id)
+        elif request.action == "pick":
+            self._settle_pick(request, response)
         elif request.action == "mine" and response.ok:
             self._resources[request.player_id].add(request.item_id, request.amount)
         del self._pending[request.op_id]
         self._save()
         return response.refusal
+
+    def _settle_pick(self, request: Request, response: Response) -> None:
+        # After a restart there is no proxy: the real entry is built from the
+        # item data in the answer, which the Universe stored and replays.
+        proxy = self._proxies.pop(request.op_id, None)
+        if not response.ok:
+            if proxy is not None:
+                proxy.cancel_pick()
+            return
+        if proxy is not None:
+            proxy.finish_pick()  # done: the proxy is now dropped from the Broker
+        inventory = self._inventories[request.player_id]
+        for info in response.items:
+            if inventory.find(info.item_id) is None:
+                inventory.add(InventoryEntry(info.item_id, info.name))
 
     def _unknown_player(self, what: str, player_id: str) -> Refusal:
         return Refusal(
@@ -199,7 +280,7 @@ class Broker:
             )
         if request.action == "add_item":
             # The saved item is still in the inventory, so move it back to
-            # BeingDropped: it must stay locked until the drop is settled.
+            # flight: it must stay locked until the drop is settled.
             refusal = self._inventories[request.player_id].begin_drop(request.item_id)
             if refusal is not None:
                 raise CorruptStoreError(

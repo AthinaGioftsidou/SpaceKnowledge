@@ -1,6 +1,7 @@
 """The two messages that cross between the Broker and the Universe."""
 
 from observatory.common.refusal import Refusal
+from dataclasses import dataclass
 
 
 class Request:
@@ -47,16 +48,38 @@ class Request:
     def amount(self) -> int:
         return self._amount
 
-class Response:
-    """The Universe's answer: OK, or a Refusal that says why not."""
+@dataclass(frozen=True)
+class ItemInfo:
+    """Plain data about one item, so objects never cross between the servers.
+    Read-only."""
 
-    def __init__(self, op_id: str, refusal: Refusal | None = None) -> None:
+    item_id: str
+    name: str
+    description: str
+
+    def __post_init__(self) -> None:
+        for label, value in (("item_id", self.item_id), ("name", self.name),
+                             ("description", self.description)):
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"{label} must not be empty")
+
+class Response:
+    """The Universe's answer: OK (with optional item data), or a Refusal."""
+
+    def __init__(
+        self, op_id: str, refusal: Refusal | None = None, items: tuple[ItemInfo, ...] = ()
+    ) -> None:
         if not op_id:
             raise ValueError("op_id must not be empty")
         if refusal is not None and not isinstance(refusal, Refusal):
             raise TypeError(f"refusal must be a Refusal, not {type(refusal).__name__}")
+        if not isinstance(items, tuple) or not all(isinstance(i, ItemInfo) for i in items):
+            raise TypeError("items must be a tuple of ItemInfo")
+        if refusal is not None and items:
+            raise ValueError("a refusal carries no items")
         self._op_id = op_id
         self._refusal = refusal
+        self._items = items
 
     @property
     def op_id(self) -> str:
@@ -69,3 +92,7 @@ class Response:
     @property
     def refusal(self) -> Refusal | None:
         return self._refusal
+
+    @property
+    def items(self) -> tuple[ItemInfo, ...]:
+        return self._items

@@ -79,3 +79,34 @@ class MineCommand(Command):
         if refusal is not None:
             return refusal.describe()
         return f"You mine {self._amount} {self._resource}."
+
+
+class LookCommand(Command):
+    def execute(self, broker: Broker, player_id: str) -> str:
+        if not isinstance(broker, Broker):
+            raise TypeError(f"broker must be a Broker, not {type(broker).__name__}")
+        result = broker.look(player_id)
+        if isinstance(result, Refusal):
+            return result.describe()
+        if not result:
+            return "Nothing lies on the ground here."
+        return "On the ground here: " + ", ".join(proxy.name for proxy in result)
+
+
+class PickCommand(Command):
+    def __init__(self, target: str) -> None:
+        if not target:
+            raise ValueError("target must not be empty")
+        self._target = target
+
+    @property
+    def target(self) -> str:
+        return self._target
+
+    def execute(self, broker: Broker, player_id: str) -> str:
+        if not isinstance(broker, Broker):
+            raise TypeError(f"broker must be a Broker, not {type(broker).__name__}")
+        refusal = broker.pick(player_id, self._target)
+        if refusal is not None:
+            return refusal.describe()
+        return f"You pick up the {self._target}."

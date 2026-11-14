@@ -2,7 +2,7 @@
 
 import unittest
 
-from observatory.common.messages import Request, Response
+from observatory.common.messages import ItemInfo, Request, Response
 from observatory.common.refusal import Refusal
 
 
@@ -61,6 +61,34 @@ class TestRequestAmount(unittest.TestCase):
                 with self.assertRaisesRegex(TypeError, "must be"):
                     Request("op1", "mine", "ada", "iron", amount)  # type: ignore[arg-type]
 
+
+class TestItemInfoAndItems(unittest.TestCase):
+    def test_an_item_info_keeps_its_parts(self) -> None:
+        info = ItemInfo("torch", "torch", "a rubber torch")
+        self.assertEqual(("torch", "torch", "a rubber torch"),
+                         (info.item_id, info.name, info.description))
+
+    def test_an_empty_part_is_refused(self) -> None:
+        for parts in (("", "n", "d"), ("i", "", "d"), ("i", "n", "")):
+            with self.subTest(parts=parts):
+                with self.assertRaises(ValueError):
+                    ItemInfo(*parts)
+
+    def test_a_response_can_carry_items(self) -> None:
+        info = ItemInfo("torch", "torch", "a rubber torch")
+        response = Response("op1", items=(info,))
+        self.assertTrue(response.ok)
+        self.assertEqual((info,), response.items)
+        self.assertEqual((), Response("op1").items)
+
+    def test_a_refusal_and_items_together_are_refused(self) -> None:
+        info = ItemInfo("torch", "torch", "a rubber torch")
+        with self.assertRaises(ValueError):
+            Response("op1", Refusal("a", "b", "c"), (info,))
+
+    def test_items_must_be_a_tuple_of_item_infos(self) -> None:
+        with self.assertRaisesRegex(TypeError, "must be"):
+            Response("op1", items=["torch"])  # type: ignore[arg-type]
 
 if __name__ == "__main__":
     unittest.main()

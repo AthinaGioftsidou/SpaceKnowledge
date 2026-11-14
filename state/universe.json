@@ -83,6 +83,17 @@
         "why": "there is already a torch in Earth",
         "next_step": "pick a different item, or pick the existing one up first"
       }
+    },
+    "130cec74-op1": {
+      "ok": true
+    },
+    "130cec74-op2": {
+      "ok": false,
+      "refusal": {
+        "what": "add_item torch",
+        "why": "there is already a torch in Earth",
+        "next_step": "pick a different item, or pick the existing one up first"
+      }
     }
   }
 }

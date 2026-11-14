@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from observatory.common.messages import Response
+from observatory.common.messages import ItemInfo, Response
 from observatory.common.refusal import Refusal
 from observatory.universe.universe_repository import (
     CorruptStateError,
@@ -135,6 +135,31 @@ class TestJson(unittest.TestCase):
             JsonUniverseRepository("universe.json")  # type: ignore[arg-type]
         with self.assertRaisesRegex(TypeError, "must be"):
             self.repository.save("state")  # type: ignore[arg-type]
+
+class TestItemsInAnswers(unittest.TestCase):
+    def setUp(self) -> None:
+        self.directory = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.directory)
+        self.path = self.directory / "universe.json"
+        self.repository = JsonUniverseRepository(self.path)
+
+    def test_an_answer_with_items_round_trips_in_both_repositories(self) -> None:
+        info = ItemInfo("torch", "torch", "a rubber torch")
+        state = UniverseState({}, {}, {}, {"op1": Response("op1", items=(info,))})
+        for repository in (self.repository, InMemoryUniverseRepository()):
+            with self.subTest(repository=type(repository).__name__):
+                repository.save(state)
+                self.assertEqual((info,), repository.load().answers["op1"].items)
+
+    def test_bad_items_in_an_answer_are_refused(self) -> None:
+        good = {"id": "i", "name": "n", "description": "d"}
+        for items in ("torch", ["torch"], [{"id": "", "name": "n", "description": "d"}],
+                      [{"id": "i", "name": "n"}], [{**good, "name": 5}]):
+            with self.subTest(items=items):
+                self.path.write_text(
+                    document(answers={"op1": {"ok": True, "items": items}}), encoding="utf-8")
+                with self.assertRaises(CorruptStateError):
+                    self.repository.load()
 
 
 if __name__ == "__main__":

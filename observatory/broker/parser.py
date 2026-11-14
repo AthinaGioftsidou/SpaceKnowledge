@@ -1,6 +1,13 @@
 """Turning what a player typed into a Command."""
 
-from observatory.broker.command import Command, DropCommand, InventoryCommand, MineCommand
+from observatory.broker.command import (
+    Command,
+    DropCommand,
+    InventoryCommand,
+    LookCommand,
+    MineCommand,
+    PickCommand,
+)
 
 
 class ParseError(Exception):
@@ -11,10 +18,15 @@ class ParseError(Exception):
 _NO_ARGUMENT = {
     "inventory": InventoryCommand,
     "i": InventoryCommand,
+    "look": LookCommand,
+    "l": LookCommand,
 }
 
 _ONE_ARGUMENT = {
     "drop": DropCommand,
+    "pick": PickCommand,
+    "take": PickCommand,
+    "get": PickCommand,
 }
 
 # A name, then an optional whole number: "mine iron 3".
@@ -38,6 +50,8 @@ class Parser:
                 raise ParseError(f"'{verb}' does not take anything after it")
             return _NO_ARGUMENT[verb]()
         if verb in _ONE_ARGUMENT:
+            if verb == "pick" and rest[:1] == ["up"]:
+                rest = rest[1:]  # "pick up the torch" means "pick the torch"
             return _ONE_ARGUMENT[verb](self._name(verb, rest, "item"))
         if verb in _WITH_AMOUNT:
             return self._parse_with_amount(verb, rest)

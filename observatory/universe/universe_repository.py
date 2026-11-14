@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from observatory.common.atomic_json import write_json_atomically
-from observatory.common.messages import Response
+from observatory.common.messages import ItemInfo, Response
 from observatory.common.refusal import Refusal
 from observatory.universe.deposits import Stock
 
@@ -90,7 +90,13 @@ class JsonUniverseRepository(UniverseRepository):
     @staticmethod
     def _encode(response: Response) -> dict[str, Any]:
         if response.ok:
-            return {"ok": True}
+            body: dict[str, Any] = {"ok": True}
+            if response.items:
+                body["items"] = [
+                    {"id": i.item_id, "name": i.name, "description": i.description}
+                    for i in response.items
+                ]
+            return body
         refusal = response.refusal
         return {
             "ok": False,
@@ -178,7 +184,7 @@ class JsonUniverseRepository(UniverseRepository):
         if not isinstance(body, dict) or not isinstance(body.get("ok"), bool):
             raise self._corrupt(f"has a bad answer for {op_id}")
         if body["ok"]:
-            return Response(op_id)
+            return Response(op_id, items=self._decode_items(op_id, body.get("items", [])))
         refusal = body.get("refusal")
         if not isinstance(refusal, dict):
             raise self._corrupt(f"has a refusal without details for {op_id}")
@@ -187,3 +193,17 @@ class JsonUniverseRepository(UniverseRepository):
             for key in ("what", "why", "next_step")
         ]
         return Response(op_id, Refusal(*parts))
+
+    def _decode_items(self, op_id: str, raw: Any) -> tuple[ItemInfo, ...]:
+        if not isinstance(raw, list):
+            raise self._corrupt(f"has a bad item list in the answer {op_id}")
+        items: list[ItemInfo] = []
+        for entry in raw:
+            if not isinstance(entry, dict):
+                raise self._corrupt(f"has a bad item in the answer {op_id}")
+            items.append(ItemInfo(
+                self._text(entry.get("id"), f"an item id in the answer {op_id}"),
+                self._text(entry.get("name"), f"an item name in the answer {op_id}"),
+                self._text(entry.get("description"), f"an item description in the answer {op_id}"),
+            ))
+        return tuple(items)
