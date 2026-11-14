@@ -11,13 +11,7 @@ class ServerStoppedError(ConnectionError):
 
 
 class Ticket[Q, A]:
-    """A piece of work waiting for its answer.
-
-    Q is the type of the question and A the type of the answer. One thread
-    waits on the ticket and the other fills it in. The answer is stored BEFORE
-    the event is set and read only AFTER the wait ends, which is what makes
-    the hand-over safe without a lock.
-    """
+    """A piece of work waiting for its answer."""
 
     def __init__(self, payload: Q) -> None:
         self._payload = payload

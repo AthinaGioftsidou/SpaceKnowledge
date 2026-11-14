@@ -1,12 +1,12 @@
-"""An item in a player's inventory. Its drop is a Transition."""
+"""An item in a player's inventory. It goes round the item cycle."""
 
+from observatory.common.item_cycle import ItemCycle
 from observatory.common.refusal import Refusal
-from observatory.common.transition import DROP, Transition
 
 
 class InventoryEntry:
-    """One item a player holds, with the state of its drop. The Broker's own
-    record, not the Universe's Item."""
+    """One item a player holds, with its phase. The Broker's own record,
+    not the Universe's Item."""
 
     def __init__(self, item_id: str, name: str) -> None:
         if not item_id:
@@ -15,7 +15,7 @@ class InventoryEntry:
             raise ValueError("name must not be empty")
         self._item_id = item_id
         self._name = name
-        self._drop = Transition(DROP, name)
+        self._cycle = ItemCycle(name)
 
     @property
     def item_id(self) -> str:
@@ -25,18 +25,20 @@ class InventoryEntry:
     def name(self) -> str:
         return self._name
 
-    def state_name(self) -> str:
-        return self._drop.phase_name()
+    def phase_name(self) -> str:
+        return self._cycle.phase_name()
+
+    def state(self) -> str:
+        return self._cycle.state()
 
     def is_usable(self) -> bool:
-        """Only an item that is not mid-drop (or finished dropping) is usable."""
-        return self._drop.is_at_start()
+        return self._cycle.is_usable()
 
     def begin_drop(self) -> Refusal | None:
-        return self._drop.begin()
+        return self._cycle.begin_drop()
 
     def finish_drop(self) -> Refusal | None:
-        return self._drop.confirm()
+        return self._cycle.finish_drop()
 
     def cancel_drop(self) -> Refusal | None:
-        return self._drop.cancel()
+        return self._cycle.cancel_drop()

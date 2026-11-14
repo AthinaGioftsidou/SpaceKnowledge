@@ -42,7 +42,7 @@ class PlayerInventory:
         if not entry.is_usable():
             return Refusal(
                 f"use {entry.name}",
-                f"the {entry.name} is {entry.state_name()}",
+                f"the {entry.name} is {entry.phase_name()}",
                 "wait for the current action to finish, then try again",
             )
         return None

@@ -1,4 +1,4 @@
-"""Tests for InventoryEntry and the three states an item can be in."""
+"""Tests for InventoryEntry, the Broker's record of one item."""
 
 import unittest
 
@@ -13,7 +13,8 @@ def a_torch() -> InventoryEntry:
 class TestConstruction(unittest.TestCase):
     def test_a_new_entry_is_owned_and_usable(self) -> None:
         entry = a_torch()
-        self.assertEqual("owned", entry.state_name())
+        self.assertEqual("owned", entry.phase_name())
+        self.assertEqual("owned", entry.state())
         self.assertTrue(entry.is_usable())
 
     def test_an_empty_id_is_refused(self) -> None:
@@ -26,21 +27,19 @@ class TestConstruction(unittest.TestCase):
 
 
 class TestOwned(unittest.TestCase):
-    def test_beginning_a_drop_makes_it_unusable(self) -> None:
+    def test_beginning_a_drop_puts_it_in_flight_and_unusable(self) -> None:
         entry = a_torch()
         self.assertIsNone(entry.begin_drop())
-        self.assertEqual("being_dropped", entry.state_name())
+        self.assertEqual("being_dropped", entry.phase_name())
+        self.assertEqual("flight", entry.state())
         self.assertFalse(entry.is_usable())
 
-    def test_finishing_a_drop_that_never_began_is_refused(self) -> None:
-        entry = a_torch()
-        self.assertIsInstance(entry.finish_drop(), Refusal)
-        self.assertEqual("owned", entry.state_name())
-
-    def test_cancelling_a_drop_that_never_began_is_refused(self) -> None:
-        entry = a_torch()
-        self.assertIsInstance(entry.cancel_drop(), Refusal)
-        self.assertEqual("owned", entry.state_name())
+    def test_finishing_or_cancelling_a_drop_that_never_began_is_refused(self) -> None:
+        for move in ("finish_drop", "cancel_drop"):
+            with self.subTest(move=move):
+                entry = a_torch()
+                self.assertIsInstance(getattr(entry, move)(), Refusal)
+                self.assertEqual("owned", entry.phase_name())
 
 
 class TestBeingDropped(unittest.TestCase):
@@ -49,21 +48,21 @@ class TestBeingDropped(unittest.TestCase):
         self.entry.begin_drop()
 
     def test_a_second_drop_is_refused_and_nothing_changes(self) -> None:
-        refusal = self.entry.begin_drop()
-        self.assertIsInstance(refusal, Refusal)
-        self.assertEqual("being_dropped", self.entry.state_name())
+        self.assertIsInstance(self.entry.begin_drop(), Refusal)
+        self.assertEqual("being_dropped", self.entry.phase_name())
 
-    def test_the_universe_saying_ok_finishes_the_drop(self) -> None:
+    def test_the_universe_saying_ok_puts_it_on_the_ground(self) -> None:
         self.assertIsNone(self.entry.finish_drop())
-        self.assertEqual("dropped", self.entry.state_name())
+        self.assertEqual("on_ground", self.entry.phase_name())
+        self.assertEqual("done", self.entry.state())
 
     def test_the_universe_saying_no_gives_the_item_back(self) -> None:
         self.assertIsNone(self.entry.cancel_drop())
-        self.assertEqual("owned", self.entry.state_name())
+        self.assertEqual("owned", self.entry.phase_name())
         self.assertTrue(self.entry.is_usable())
 
 
-class TestDroppedIsFinal(unittest.TestCase):
+class TestOnGround(unittest.TestCase):
     def setUp(self) -> None:
         self.entry = a_torch()
         self.entry.begin_drop()
@@ -72,15 +71,15 @@ class TestDroppedIsFinal(unittest.TestCase):
     def test_it_is_not_usable(self) -> None:
         self.assertFalse(self.entry.is_usable())
 
-    def test_no_move_gets_it_back(self) -> None:
+    def test_the_drop_moves_are_refused(self) -> None:
         for move in (self.entry.begin_drop, self.entry.finish_drop, self.entry.cancel_drop):
             with self.subTest(move=move.__name__):
                 self.assertIsInstance(move(), Refusal)
-                self.assertEqual("dropped", self.entry.state_name())
+                self.assertEqual("on_ground", self.entry.phase_name())
 
 
 class TestTheRefusalExplainsItself(unittest.TestCase):
-    def test_it_names_the_item_and_the_state(self) -> None:
+    def test_it_names_the_item_and_the_phase(self) -> None:
         entry = a_torch()
         entry.begin_drop()
         text = entry.begin_drop().describe()

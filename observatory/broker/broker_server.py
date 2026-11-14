@@ -25,14 +25,7 @@ class Line:
 
 
 class BrokerServer:
-    """Runs a Broker on its own thread and feeds it from a queue of lines.
-
-    A consumer of player lines, and, through the Broker's channel, a producer
-    for the Universe thread. After `start`, only this thread touches the
-    Broker, so the Broker needs no lock. Set the Broker up (players, recover)
-    BEFORE starting. Stop this server BEFORE the Universe server, because it
-    may still be waiting on the Universe while it drains its queue.
-    """
+    """Runs a Broker on its own thread and feeds it from a queue of lines."""
 
     THREAD_NAME = "broker"
 

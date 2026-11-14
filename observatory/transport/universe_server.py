@@ -56,8 +56,6 @@ class UniverseServer:
         return self._thread is not None and self._thread.is_alive()
 
     def call(self, request: Request, timeout: float) -> Response:
-        """The producer side. Runs on the CALLER's thread: queue the request,
-        then wait for the Universe thread to answer it."""
         if not isinstance(request, Request):
             raise TypeError(f"request must be a Request, not {type(request).__name__}")
         if self._thread is None:
@@ -67,7 +65,6 @@ class UniverseServer:
         return pending.wait(timeout)
 
     def _run(self) -> None:
-        """The consume loop. Ends when the queue is closed and empty."""
         while True:
             call = self._queue.pop()
             if call is None:
@@ -79,9 +76,6 @@ class UniverseServer:
         try:
             response = self._universe.handle(request)
         except Exception as error:
-            # The top of this thread, so the one place a broad catch belongs.
-            # It logs with context and hands the error to the waiting caller.
-            # Without it the thread would die and the caller would wait for ever.
             log.exception(
                 "request %s (%s %s by %s) failed",
                 request.op_id, request.action, request.item_id, request.player_id,
