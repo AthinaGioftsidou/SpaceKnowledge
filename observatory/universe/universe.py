@@ -262,3 +262,13 @@ class Universe:
                 dict(self._answers),
             )
         )
+    READ_ONLY = ("look", "where")
+    # in self._handlers:  "where": self._where,
+
+    def _where(self, request: Request) -> Response:
+        room = self._room_of(request)
+        if room is None:
+            return self._unknown_player(request)
+        deposits = tuple(sorted(self._deposits.in_room(room.room_id).items()))
+        info = RoomInfo(room.name, room.description, tuple(room.exits()), deposits)
+        return Response(request.op_id, room=info)

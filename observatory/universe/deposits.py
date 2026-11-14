@@ -61,3 +61,6 @@ class Deposits:
         """Replace everything with `stock`, checked like a new Deposits.
         If `stock` is bad this raises and the old stock is kept."""
         self._stock = Deposits(stock)._stock
+
+    def in_room(self, room_id: str) -> dict[str, int]:
+        return {r: q for r, q in self._stock.get(room_id, {}).items() if q > 0}

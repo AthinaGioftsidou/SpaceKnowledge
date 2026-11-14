@@ -6,7 +6,7 @@
   },
   "stock": {
     "earth": {
-      "iron": 488,
+      "iron": 487,
       "wood": 300,
       "water": 800
     },
@@ -94,6 +94,66 @@
         "why": "there is already a torch in Earth",
         "next_step": "pick a different item, or pick the existing one up first"
       }
+    },
+    "c47c30a7-op1": {
+      "ok": true
+    },
+    "c47c30a7-op2": {
+      "ok": false,
+      "refusal": {
+        "what": "add_item torch",
+        "why": "there is already a torch in Earth",
+        "next_step": "pick a different item, or pick the existing one up first"
+      }
+    },
+    "c47c30a7-op3": {
+      "ok": false,
+      "refusal": {
+        "what": "mine nickel",
+        "why": "there is no nickel to mine on Earth",
+        "next_step": "travel to a destination that has it, or mine something else"
+      }
+    },
+    "c47c30a7-op4": {
+      "ok": true
+    },
+    "6d47ad56-op1": {
+      "ok": true
+    },
+    "21d8c0cd-op1": {
+      "ok": true
+    },
+    "d7df67cb-op1": {
+      "ok": true
+    },
+    "ab08bb42-op1": {
+      "ok": true
+    },
+    "ab08bb42-op3": {
+      "ok": true,
+      "items": [
+        {
+          "id": "torch",
+          "name": "torch",
+          "description": "a torch"
+        }
+      ]
+    },
+    "ab08bb42-op4": {
+      "ok": true
+    },
+    "ab08bb42-op7": {
+      "ok": true,
+      "items": [
+        {
+          "id": "torch",
+          "name": "torch",
+          "description": "a torch"
+        }
+      ]
+    },
+    "ab08bb42-op9": {
+      "ok": true
     }
   }
 }

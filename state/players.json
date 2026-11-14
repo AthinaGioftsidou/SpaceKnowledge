@@ -8,14 +8,9 @@
       }
     },
     "ati": {
-      "items": [
-        {
-          "id": "torch",
-          "name": "torch"
-        }
-      ],
+      "items": [],
       "resources": {
-        "iron": 6
+        "iron": 7
       }
     }
   },

@@ -136,3 +136,7 @@ class Room:
             if not door.is_passable():
                 lines.append(f"The {door.name} {direction} is {door.state_name()}.")
         return "\n".join(lines)
+
+    @property
+    def description(self) -> str:
+        return self._description
