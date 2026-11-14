@@ -1,129 +1,169 @@
-"""Tests for ItemCycle: four phases, three states, one loop."""
+"""Tests for ItemCycle: three states, two processes, one loop."""
 
 import unittest
+from dataclasses import FrozenInstanceError
 
 from observatory.common.item_cycle import (
     BROKER,
     DONE,
+    DROP,
     FLIGHT,
     OWNED,
+    PICK,
     UNIVERSE,
     ItemCycle,
-    OnGroundPhase,
-    Phase,
+    Process,
+    State,
 )
 from observatory.common.refusal import Refusal
 
-MOVES = ("begin_drop", "finish_drop", "cancel_drop",
-         "begin_pick", "finish_pick", "cancel_pick")
+MOVES = ("begin", "finish", "cancel")
+POSITIONS = [(p, s) for p in (DROP, PICK) for s in (OWNED, FLIGHT, DONE)]
 
-# How to reach each phase from the start, and which moves it allows.
-PATHS = {
-    "owned": [],
-    "being_dropped": ["begin_drop"],
-    "on_ground": ["begin_drop", "finish_drop"],
-    "being_picked": ["begin_drop", "finish_drop", "begin_pick"],
+HOLDERS = {
+    ("drop", OWNED): BROKER, ("drop", FLIGHT): BROKER, ("drop", DONE): UNIVERSE,
+    ("pick", OWNED): UNIVERSE, ("pick", FLIGHT): UNIVERSE, ("pick", DONE): BROKER,
 }
-ALLOWED = {
-    "owned": {"begin_drop"},
-    "being_dropped": {"finish_drop", "cancel_drop"},
-    "on_ground": {"begin_pick"},
-    "being_picked": {"finish_pick", "cancel_pick"},
-}
-OWNERS = {"owned": BROKER, "being_dropped": BROKER,
-          "on_ground": UNIVERSE, "being_picked": UNIVERSE}
-STATES = {"owned": OWNED, "being_dropped": FLIGHT,
-          "on_ground": DONE, "being_picked": FLIGHT}
+USABLE = {("drop", OWNED), ("pick", DONE)}
 
 
-def at(phase_name: str) -> ItemCycle:
-    cycle = ItemCycle("torch")
-    for move in PATHS[phase_name]:
-        assert getattr(cycle, move)() is None
+def other(process: Process) -> Process:
+    return PICK if process == DROP else DROP
+
+
+def at(process: Process, state: str) -> ItemCycle:
+    """An item standing at `state` of `process`."""
+    cycle = ItemCycle("torch", process)
+    if state in (FLIGHT, DONE):
+        assert cycle.begin(process) is None
+    if state == DONE:
+        assert cycle.finish(process) is None
     return cycle
 
 
+def allowed(process: Process, state: str) -> list[tuple[str, Process]]:
+    """The only moves that work at each position."""
+    if state == OWNED:
+        return [("begin", process)]
+    if state == FLIGHT:
+        return [("finish", process), ("cancel", process)]
+    return [("begin", other(process))]
+
+
+class TestProcesses(unittest.TestCase):
+    def test_who_holds_the_item_in_each_state(self) -> None:
+        for process, state in POSITIONS:
+            with self.subTest(process=process.name, state=state):
+                self.assertEqual(HOLDERS[(process.name, state)], process.holder(state))
+
+    def test_an_empty_word_or_an_unknown_holder_is_refused(self) -> None:
+        bad = [
+            ("", "drop", BROKER, BROKER, UNIVERSE, "a", "b"),
+            ("drop", "", BROKER, BROKER, UNIVERSE, "a", "b"),
+            ("drop", "drop", BROKER, BROKER, UNIVERSE, "", "b"),
+            ("drop", "drop", BROKER, BROKER, UNIVERSE, "a", ""),
+            ("drop", "drop", "nobody", BROKER, UNIVERSE, "a", "b"),
+        ]
+        for fields in bad:
+            with self.subTest(fields=fields):
+                with self.assertRaises(ValueError):
+                    Process(*fields)
+
+    def test_a_process_cannot_be_changed(self) -> None:
+        with self.assertRaises(FrozenInstanceError):
+            DROP.name = "throw"  # type: ignore[misc]
+
+
 class TestTheCycle(unittest.TestCase):
-    def test_a_new_item_is_in_the_owned_phase_and_usable(self) -> None:
+    def test_a_new_item_is_owned_by_the_broker_and_usable(self) -> None:
         cycle = ItemCycle("torch")
-        self.assertEqual("owned", cycle.phase_name())
-        self.assertEqual(OWNED, cycle.state())
-        self.assertEqual(BROKER, cycle.owner())
+        self.assertEqual(("drop", OWNED, BROKER),
+                         (cycle.process_name(), cycle.state(), cycle.holder()))
         self.assertTrue(cycle.is_usable())
 
-    def test_the_whole_loop_returns_to_owned_and_can_go_round_again(self) -> None:
+    def test_the_whole_loop_returns_to_the_broker_and_can_go_round_again(self) -> None:
+        steps = [
+            ("begin", DROP, "drop", FLIGHT, BROKER),
+            ("finish", DROP, "drop", DONE, UNIVERSE),
+            ("begin", PICK, "pick", FLIGHT, UNIVERSE),
+            ("finish", PICK, "pick", DONE, BROKER),
+        ]
         cycle = ItemCycle("torch")
         for _ in range(2):
-            for move, expected in (("begin_drop", "being_dropped"),
-                                   ("finish_drop", "on_ground"),
-                                   ("begin_pick", "being_picked"),
-                                   ("finish_pick", "owned")):
-                self.assertIsNone(getattr(cycle, move)())
-                self.assertEqual(expected, cycle.phase_name())
+            for move, process, name, state, holder in steps:
+                self.assertIsNone(getattr(cycle, move)(process))
+                self.assertEqual((name, state, holder),
+                                 (cycle.process_name(), cycle.state(), cycle.holder()))
 
     def test_a_refused_drop_gives_the_item_back(self) -> None:
-        cycle = at("being_dropped")
-        self.assertIsNone(cycle.cancel_drop())
-        self.assertEqual("owned", cycle.phase_name())
+        cycle = at(DROP, FLIGHT)
+        self.assertIsNone(cycle.cancel(DROP))
+        self.assertEqual(("drop", OWNED, BROKER),
+                         (cycle.process_name(), cycle.state(), cycle.holder()))
 
     def test_a_refused_pick_leaves_it_on_the_ground(self) -> None:
-        cycle = at("being_picked")
-        self.assertIsNone(cycle.cancel_pick())
-        self.assertEqual("on_ground", cycle.phase_name())
+        cycle = at(PICK, FLIGHT)
+        self.assertIsNone(cycle.cancel(PICK))
+        self.assertEqual(("pick", OWNED, UNIVERSE),
+                         (cycle.process_name(), cycle.state(), cycle.holder()))
 
-    def test_each_phase_belongs_to_one_side(self) -> None:
-        for name, owner in OWNERS.items():
-            with self.subTest(phase=name):
-                self.assertEqual(owner, at(name).owner())
+    def test_on_the_ground_is_the_end_of_the_drop_and_the_start_of_the_pick(self) -> None:
+        dropped = at(DROP, DONE)
+        waiting = ItemCycle("torch", PICK)
+        self.assertEqual(dropped.holder(), waiting.holder())
+        self.assertEqual(UNIVERSE, waiting.holder())
 
-    def test_each_phase_has_its_state(self) -> None:
-        for name, state in STATES.items():
-            with self.subTest(phase=name):
-                self.assertEqual(state, at(name).state())
+    def test_an_item_may_start_on_the_ground(self) -> None:
+        cycle = ItemCycle("rock", PICK)
+        self.assertFalse(cycle.is_usable())
+        self.assertIsNone(cycle.begin(PICK))
 
-    def test_only_the_owned_state_is_usable(self) -> None:
-        for name in PATHS:
-            with self.subTest(phase=name):
-                self.assertEqual(name == "owned", at(name).is_usable())
+    def test_only_an_item_the_broker_holds_at_rest_is_usable(self) -> None:
+        for process, state in POSITIONS:
+            with self.subTest(process=process.name, state=state):
+                self.assertEqual((process.name, state) in USABLE, at(process, state).is_usable())
 
 
 class TestEveryOtherMoveIsRefused(unittest.TestCase):
-    def test_a_move_a_phase_does_not_allow_is_refused_and_changes_nothing(self) -> None:
-        for name in PATHS:
+    def test_a_move_a_position_does_not_allow_is_refused_and_changes_nothing(self) -> None:
+        for process, state in POSITIONS:
             for move in MOVES:
-                if move in ALLOWED[name]:
-                    continue
-                with self.subTest(phase=name, move=move):
-                    cycle = at(name)
-                    self.assertIsInstance(getattr(cycle, move)(), Refusal)
-                    self.assertEqual(name, cycle.phase_name())
+                for wanted in (DROP, PICK):
+                    if (move, wanted) in allowed(process, state):
+                        continue
+                    with self.subTest(process=process.name, state=state,
+                                      move=move, wanted=wanted.name):
+                        cycle = at(process, state)
+                        self.assertIsInstance(getattr(cycle, move)(wanted), Refusal)
+                        self.assertEqual((process.name, state),
+                                         (cycle.process_name(), cycle.state()))
 
-    def test_a_refusal_names_the_item_the_phase_and_what_to_do(self) -> None:
-        text = at("being_dropped").begin_drop().describe()
-        self.assertIn("torch", text)
-        self.assertIn("being_dropped", text)
-        self.assertIn("Next:", text)
+    def test_a_refusal_names_the_item_the_state_the_holder_and_what_to_do(self) -> None:
+        text = at(DROP, FLIGHT).begin(DROP).describe()
+        for part in ("torch", "flight", "broker", "Next:"):
+            self.assertIn(part, text)
 
-    def test_the_advice_depends_on_the_phase(self) -> None:
-        self.assertIn("wait", at("being_dropped").begin_drop().next_step)
-        self.assertIn("ground", at("on_ground").begin_drop().next_step)
+    def test_the_advice_depends_on_the_state_and_the_process(self) -> None:
+        self.assertIn("wait", at(DROP, FLIGHT).begin(DROP).next_step)
+        self.assertIn("ground", at(DROP, DONE).begin(DROP).next_step)
+        self.assertIn("drop", at(PICK, DONE).begin(PICK).next_step)
 
 
 class TestArguments(unittest.TestCase):
-    def test_an_item_may_start_on_the_ground(self) -> None:
-        cycle = ItemCycle("rock", OnGroundPhase())
-        self.assertEqual("on_ground", cycle.phase_name())
-        self.assertIsNone(cycle.begin_pick())
-
     def test_bad_arguments_are_refused(self) -> None:
         with self.assertRaises(ValueError):
             ItemCycle("")
         with self.assertRaisesRegex(TypeError, "must be"):
-            ItemCycle("torch", "owned")  # type: ignore[arg-type]
+            ItemCycle("torch", "drop")  # type: ignore[arg-type]
+        cycle = ItemCycle("torch")
+        for move in MOVES:
+            with self.subTest(move=move):
+                with self.assertRaisesRegex(TypeError, "must be"):
+                    getattr(cycle, move)("drop")
 
-    def test_the_abstract_phase_cannot_be_built(self) -> None:
+    def test_the_abstract_state_cannot_be_built(self) -> None:
         with self.assertRaises(TypeError):
-            Phase()  # type: ignore[abstract]
+            State()  # type: ignore[abstract]
 
 
 if __name__ == "__main__":

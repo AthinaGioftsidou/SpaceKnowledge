@@ -11,10 +11,10 @@ def a_torch() -> InventoryEntry:
 
 
 class TestConstruction(unittest.TestCase):
-    def test_a_new_entry_is_owned_and_usable(self) -> None:
+    def test_a_new_entry_is_owned_by_the_broker_and_usable(self) -> None:
         entry = a_torch()
-        self.assertEqual("owned", entry.phase_name())
-        self.assertEqual("owned", entry.state())
+        self.assertEqual(("drop", "owned", "broker"),
+                         (entry.process_name(), entry.state(), entry.holder()))
         self.assertTrue(entry.is_usable())
 
     def test_an_empty_id_is_refused(self) -> None:
@@ -30,8 +30,8 @@ class TestOwned(unittest.TestCase):
     def test_beginning_a_drop_puts_it_in_flight_and_unusable(self) -> None:
         entry = a_torch()
         self.assertIsNone(entry.begin_drop())
-        self.assertEqual("being_dropped", entry.phase_name())
         self.assertEqual("flight", entry.state())
+        self.assertEqual("broker", entry.holder())
         self.assertFalse(entry.is_usable())
 
     def test_finishing_or_cancelling_a_drop_that_never_began_is_refused(self) -> None:
@@ -39,30 +39,30 @@ class TestOwned(unittest.TestCase):
             with self.subTest(move=move):
                 entry = a_torch()
                 self.assertIsInstance(getattr(entry, move)(), Refusal)
-                self.assertEqual("owned", entry.phase_name())
+                self.assertEqual("owned", entry.state())
 
 
-class TestBeingDropped(unittest.TestCase):
+class TestInFlight(unittest.TestCase):
     def setUp(self) -> None:
         self.entry = a_torch()
         self.entry.begin_drop()
 
     def test_a_second_drop_is_refused_and_nothing_changes(self) -> None:
         self.assertIsInstance(self.entry.begin_drop(), Refusal)
-        self.assertEqual("being_dropped", self.entry.phase_name())
+        self.assertEqual("flight", self.entry.state())
 
-    def test_the_universe_saying_ok_puts_it_on_the_ground(self) -> None:
+    def test_the_universe_saying_ok_finishes_the_drop(self) -> None:
         self.assertIsNone(self.entry.finish_drop())
-        self.assertEqual("on_ground", self.entry.phase_name())
         self.assertEqual("done", self.entry.state())
+        self.assertEqual("universe", self.entry.holder())
 
     def test_the_universe_saying_no_gives_the_item_back(self) -> None:
         self.assertIsNone(self.entry.cancel_drop())
-        self.assertEqual("owned", self.entry.phase_name())
+        self.assertEqual("owned", self.entry.state())
         self.assertTrue(self.entry.is_usable())
 
 
-class TestOnGround(unittest.TestCase):
+class TestDone(unittest.TestCase):
     def setUp(self) -> None:
         self.entry = a_torch()
         self.entry.begin_drop()
@@ -75,16 +75,16 @@ class TestOnGround(unittest.TestCase):
         for move in (self.entry.begin_drop, self.entry.finish_drop, self.entry.cancel_drop):
             with self.subTest(move=move.__name__):
                 self.assertIsInstance(move(), Refusal)
-                self.assertEqual("on_ground", self.entry.phase_name())
+                self.assertEqual("done", self.entry.state())
 
 
 class TestTheRefusalExplainsItself(unittest.TestCase):
-    def test_it_names_the_item_and_the_phase(self) -> None:
+    def test_it_names_the_item_and_the_state(self) -> None:
         entry = a_torch()
         entry.begin_drop()
         text = entry.begin_drop().describe()
         self.assertIn("torch", text)
-        self.assertIn("being_dropped", text)
+        self.assertIn("flight", text)
 
 
 if __name__ == "__main__":

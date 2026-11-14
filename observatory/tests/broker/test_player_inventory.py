@@ -53,7 +53,7 @@ class TestUsing(unittest.TestCase):
         inventory.begin_drop("torch")
         refusal = inventory.check_usable("torch")
         self.assertIsInstance(refusal, Refusal)
-        self.assertIn("being_dropped", refusal.describe())
+        self.assertIn("flight", refusal.describe())
 
 
 class TestDropping(unittest.TestCase):

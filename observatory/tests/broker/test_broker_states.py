@@ -1,4 +1,4 @@
-"""Tests that a drop goes through the phases and a mine does not."""
+"""Tests that a drop goes through the states and a mine does not."""
 
 import unittest
 from collections.abc import Callable
@@ -41,7 +41,7 @@ def an_earth() -> tuple[Universe, Room]:
     return universe, earth
 
 
-class TestDropPhases(unittest.TestCase):
+class TestDropStates(unittest.TestCase):
     def setUp(self) -> None:
         self.universe, self.earth = an_earth()
         self.channel = WatchingChannel(InMemoryChannel(self.universe))
@@ -49,13 +49,13 @@ class TestDropPhases(unittest.TestCase):
         self.broker.add_player("ada")
         self.broker.give("ada", InventoryEntry("torch", "torch"))
         self.channel.watch = lambda: (
-            self.broker.inventory_of("ada").find("torch").phase_name(),
             self.broker.inventory_of("ada").find("torch").state(),
+            self.broker.inventory_of("ada").find("torch").holder(),
         )
 
     def test_a_drop_is_in_flight_while_the_universe_decides(self) -> None:
         self.broker.drop("ada", "torch")
-        self.assertEqual([("being_dropped", "flight")], self.channel.seen)
+        self.assertEqual([("flight", "broker")], self.channel.seen)
 
     def test_a_confirmed_drop_leaves_the_inventory_and_lands_in_the_world(self) -> None:
         self.assertIsNone(self.broker.drop("ada", "torch"))
@@ -65,10 +65,10 @@ class TestDropPhases(unittest.TestCase):
     def test_a_refused_drop_is_owned_again(self) -> None:
         self.earth.add_item(PlainItem("torch", "torch", "a torch already here"))
         self.assertIsNotNone(self.broker.drop("ada", "torch"))
-        self.assertEqual("owned", self.broker.inventory_of("ada").find("torch").phase_name())
+        self.assertEqual("owned", self.broker.inventory_of("ada").find("torch").state())
 
 
-class TestMiningHasNoPhases(unittest.TestCase):
+class TestMiningHasNoStates(unittest.TestCase):
     def test_a_mine_is_a_request_and_a_pending_note_while_it_waits(self) -> None:
         universe, _ = an_earth()
         channel = WatchingChannel(InMemoryChannel(universe))
@@ -76,7 +76,7 @@ class TestMiningHasNoPhases(unittest.TestCase):
         broker.add_player("ada")
         broker.give("ada", InventoryEntry("torch", "torch"))
         channel.watch = lambda: (broker.pending_count(),
-                                 broker.inventory_of("ada").find("torch").phase_name())
+                                 broker.inventory_of("ada").find("torch").state())
         broker.mine("ada", "iron", 3)
         self.assertEqual([(1, "owned")], channel.seen)
         self.assertEqual(0, broker.pending_count())
@@ -94,7 +94,7 @@ class TestAcrossACrash(unittest.TestCase):
             broker.drop("ada", "torch")
 
         again = Broker(InMemoryChannel(universe), repository)
-        self.assertEqual("being_dropped", again.inventory_of("ada").find("torch").phase_name())
+        self.assertEqual("flight", again.inventory_of("ada").find("torch").state())
         self.assertEqual(1, again.recover())
         self.assertEqual(0, again.inventory_of("ada").count())
         self.assertIsNotNone(earth.find_item("torch"))
