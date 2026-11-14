@@ -18,14 +18,23 @@ log.addHandler(logging.NullHandler())
 
 @dataclass(frozen=True)
 class Line:
-    """What one player typed. Read-only."""
+    """What one player sent. Read-only. A typed line has text; a join has a
+    destination instead."""
 
     player_id: str
     text: str
+    join_to: str | None = None
 
 
 class BrokerServer:
-    """Runs a Broker on its own thread and feeds it from a queue of lines."""
+    """Runs a Broker on its own thread and feeds it from a queue of lines.
+
+    A consumer of player lines, and, through the Broker's channel, a producer
+    for the Universe thread. After `start`, only this thread touches the
+    Broker, so the Broker needs no lock. Set the Broker up (recover) BEFORE
+    starting. Stop this server BEFORE the Universe server, because it may
+    still be waiting on the Universe while it drains its queue.
+    """
 
     THREAD_NAME = "broker"
 
@@ -70,9 +79,21 @@ class BrokerServer:
             raise ValueError("player_id must not be empty")
         if not isinstance(text, str):
             raise TypeError(f"text must be a str, not {type(text).__name__}")
+        return self._ask(Line(player_id, text), timeout)
+
+    def join(self, player_id: str, destination: str, timeout: float = 5.0) -> str:
+        """Create the player if new and place them at `destination`, on the
+        Broker thread. Returns "" if all is well, otherwise the refusal text."""
+        if not player_id:
+            raise ValueError("player_id must not be empty")
+        if not destination:
+            raise ValueError("destination must not be empty")
+        return self._ask(Line(player_id, "", destination), timeout)
+
+    def _ask(self, line: Line, timeout: float) -> str:
         if self._thread is None:
             raise ServerStoppedError("the Broker server has not been started")
-        ticket: Ticket[Line, str] = Ticket(Line(player_id, text))
+        ticket: Ticket[Line, str] = Ticket(line)
         self._queue.push(ticket)
         return ticket.wait(timeout)
 
@@ -84,24 +105,31 @@ class BrokerServer:
                 return
             self._serve(ticket)
 
+    def _reply(self, line: Line) -> str:
+        if line.join_to is not None:
+            refusal = self._broker.join(line.player_id, line.join_to)
+            return "" if refusal is None else refusal.describe()
+        return Session(self._broker, self._parser, line.player_id).submit(line.text)
+
     def _serve(self, ticket: Ticket[Line, str]) -> None:
         line = ticket.payload
+        what = f"join {line.join_to}" if line.join_to is not None else line.text.strip()
         try:
-            reply = Session(self._broker, self._parser, line.player_id).submit(line.text)
+            reply = self._reply(line)
         except (ConnectionError, TimeoutError) as lost:
             # The Universe did not answer. The operation is saved as pending,
             # so it is not lost; the player is told what happened.
             log.warning("%s: the Universe did not answer (%s)", line.player_id, lost)
             reply = Refusal(
-                line.text.strip() or "an empty line",
+                what or "an empty line",
                 "the Universe did not answer",
                 "your action is saved and will be finished the next time the game starts",
             ).describe()
         except Exception as error:
             # The top of this thread, so the one place a broad catch belongs.
             # It logs with context and hands the error to the waiting caller.
-            log.exception("%s typed %r and it failed", line.player_id, line.text.strip())
+            log.exception("%s sent %r and it failed", line.player_id, what)
             ticket.fail(error)
             return
-        log.info("%s typed %r, reply: %s", line.player_id, line.text.strip(), reply.split("\n", 1)[0])
+        log.info("%s sent %r, reply: %s", line.player_id, what, reply.split("\n", 1)[0])
         ticket.complete(reply)

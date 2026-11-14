@@ -45,7 +45,7 @@ class Universe:
         self._dropped: dict[str, list[str]] = {}
         self._answers: dict[str, Response] = {}
         # One row per action. Adding an action is one row and one method.
-        self._handlers = {"add_item": self._add_item, "mine": self._mine}
+        self._handlers = {"add_item": self._add_item, "mine": self._mine, "join": self._join}
         self._restore()
 
     def place_player(self, player_id: str, room_id: str) -> None:
@@ -57,6 +57,25 @@ class Universe:
             raise ValueError(f"unknown room {room_id}") from None
         self._locations[player_id] = room_id
         self._save()
+        
+    def location_of(self, player_id: str) -> str | None:
+        """The id of the destination the player is in, or None if unknown."""
+        return self._locations.get(player_id)
+
+    def _join(self, request: Request) -> Response:
+        """Place a player at the destination named in `item_id`. A player who
+        is already somewhere stays there, so repeating a join is harmless."""
+        destination = request.item_id
+        try:
+            self._world.room(destination)
+        except KeyError:
+            return self._refuse(
+                request,
+                f"there is no destination called {destination}",
+                "ask the administrator which destination to start from",
+            )
+        self._locations.setdefault(request.player_id, destination)
+        return Response(request.op_id)
 
     def handle(self, request: Request) -> Response:
         if not isinstance(request, Request):

@@ -6,6 +6,17 @@
       "resources": {
         "iron": 6
       }
+    },
+    "ati": {
+      "items": [
+        {
+          "id": "torch",
+          "name": "torch"
+        }
+      ],
+      "resources": {
+        "iron": 6
+      }
     }
   },
   "pending": []

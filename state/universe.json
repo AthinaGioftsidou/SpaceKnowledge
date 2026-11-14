@@ -1,11 +1,12 @@
 {
   "version": 1,
   "locations": {
-    "ada": "earth"
+    "ada": "earth",
+    "ati": "earth"
   },
   "stock": {
     "earth": {
-      "iron": 494,
+      "iron": 488,
       "wood": 300,
       "water": 800
     },
@@ -38,6 +39,50 @@
     },
     "7a31534c-op1": {
       "ok": true
+    },
+    "111a9121-op1": {
+      "ok": true
+    },
+    "111a9121-op2": {
+      "ok": false,
+      "refusal": {
+        "what": "add_item torch",
+        "why": "there is already a torch in Earth",
+        "next_step": "pick a different item, or pick the existing one up first"
+      }
+    },
+    "111a9121-op3": {
+      "ok": true
+    },
+    "111a9121-op4": {
+      "ok": false,
+      "refusal": {
+        "what": "add_item torch",
+        "why": "there is already a torch in Earth",
+        "next_step": "pick a different item, or pick the existing one up first"
+      }
+    },
+    "deb715de-op1": {
+      "ok": true
+    },
+    "deb715de-op2": {
+      "ok": true
+    },
+    "deb715de-op3": {
+      "ok": false,
+      "refusal": {
+        "what": "mine nickel",
+        "why": "there is no nickel to mine on Earth",
+        "next_step": "travel to a destination that has it, or mine something else"
+      }
+    },
+    "deb715de-op4": {
+      "ok": false,
+      "refusal": {
+        "what": "add_item torch",
+        "why": "there is already a torch in Earth",
+        "next_step": "pick a different item, or pick the existing one up first"
+      }
     }
   }
 }

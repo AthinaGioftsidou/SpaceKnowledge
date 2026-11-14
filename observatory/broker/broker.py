@@ -16,8 +16,10 @@ from observatory.common.messages import Request, Response
 from observatory.common.refusal import Refusal
 from observatory.transport.channel import UniverseChannel
 
-# The actions the Broker sends. A saved pending operation must be one of these.
-ACTIONS = ("add_item", "mine")
+ACTIONS = ("add_item", "mine", "join")
+
+# What a brand new player is given, so that `drop` has something to drop.
+STARTING_ITEMS = (("torch", "torch"),)
 
 
 class Broker:
@@ -103,6 +105,23 @@ class Broker:
             )
         return self._send(Request(self._next_op_id(), "mine", player_id, resource, amount))
 
+    def join(self, player_id: str, destination: str) -> Refusal | None:
+        """Make sure the player exists here and has a place in the Universe.
+
+        A new player gets a record and the starting items. Joining again
+        changes nothing, because the Universe leaves a placed player where
+        they are. None if all is well, otherwise why not.
+        """
+        if not player_id:
+            raise ValueError("player_id must not be empty")
+        if not destination:
+            raise ValueError("destination must not be empty")
+        if player_id not in self._inventories:
+            self.add_player(player_id)
+            for item_id, name in STARTING_ITEMS:
+                self.give(player_id, InventoryEntry(item_id, name))
+        return self._send(Request(self._next_op_id(), "join", player_id, destination))
+
     def pending_count(self) -> int:
         """How many operations were sent and have not been settled yet."""
         return len(self._pending)
@@ -141,7 +160,7 @@ class Broker:
                 inventory.finish_drop(request.item_id)
             else:
                 inventory.cancel_drop(request.item_id)
-        elif response.ok:
+        elif request.action == "mine" and response.ok:
             self._resources[request.player_id].add(request.item_id, request.amount)
         del self._pending[request.op_id]
         self._save()

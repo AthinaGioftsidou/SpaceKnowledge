@@ -168,5 +168,29 @@ class TestMining(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "must be"):
             Universe(World({"earth": room}, "earth"), "iron")  # type: ignore[arg-type]
 
+class TestJoin(unittest.TestCase):
+    def test_a_new_player_is_placed_at_the_named_destination(self) -> None:
+        universe, _ = a_universe()
+        self.assertTrue(universe.handle(Request("op9", "join", "bob", "hall")).ok)
+        self.assertEqual("hall", universe.location_of("bob"))
+
+    def test_a_player_who_is_already_somewhere_is_left_there(self) -> None:
+        a, b = Room("a", "A", "First."), Room("b", "B", "Second.")
+        universe = Universe(World({"a": a, "b": b}, "a"))
+        universe.place_player("ada", "a")
+        self.assertTrue(universe.handle(Request("op1", "join", "ada", "b")).ok)
+        self.assertEqual("a", universe.location_of("ada"))
+
+    def test_an_unknown_destination_is_refused_and_nobody_is_placed(self) -> None:
+        universe, _ = a_universe()
+        response = universe.handle(Request("op1", "join", "bob", "nowhere"))
+        self.assertFalse(response.ok)
+        self.assertIn("nowhere", response.refusal.describe())
+        self.assertIsNone(universe.location_of("bob"))
+
+    def test_a_stranger_has_no_location(self) -> None:
+        universe, _ = a_universe()
+        self.assertIsNone(universe.location_of("zed"))
+
 if __name__ == "__main__":
     unittest.main()

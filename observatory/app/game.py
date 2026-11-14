@@ -1,0 +1,95 @@
+"""Assembly: builds the whole game and owns its two threads."""
+
+import json
+from contextlib import ExitStack
+from pathlib import Path
+
+from observatory.app.front import Front
+from observatory.app.paths import ACCOUNTS_FILE, PLAYERS_FILE, SERVER_KEY_FILE, UNIVERSE_FILE
+from observatory.broker.broker import Broker
+from observatory.broker.broker_server import BrokerServer
+from observatory.broker.inventory_repository import JsonInventoryRepository
+from observatory.transport.server_auth import (
+    AuthenticatedChannel,
+    ServerIdentity,
+    load_or_create_key,
+)
+from observatory.transport.threaded_channel import ThreadedChannel
+from observatory.transport.universe_server import UniverseServer
+from observatory.universe.deposits import Deposits
+from observatory.universe.universe import Universe
+from observatory.universe.universe_repository import JsonUniverseRepository
+from observatory.users.account_repository import JsonAccountRepository
+from observatory.users.accounts import AccountRegistry
+from observatory.users.credentials import DEFAULT_ITERATIONS
+from observatory.users.session_book import SessionBook
+from observatory.world.loader import StandardWorldLoader
+
+
+class Game:
+    """A running game: the Front that clients use, and the threads behind it.
+
+    Always call `close`. It stops the Broker thread first and the Universe
+    thread second, because the Broker may still be waiting on the Universe.
+    """
+
+    def __init__(self, front: Front, threads: ExitStack) -> None:
+        if not isinstance(front, Front):
+            raise TypeError(f"front must be a Front, not {type(front).__name__}")
+        if not isinstance(threads, ExitStack):
+            raise TypeError(f"threads must be an ExitStack, not {type(threads).__name__}")
+        self._front = front
+        self._threads = threads
+
+    @property
+    def front(self) -> Front:
+        return self._front
+
+    def close(self) -> None:
+        """Stop both threads. Harmless to call twice."""
+        self._threads.close()
+
+
+def build_game(
+    world_file: Path, state_dir: Path, iterations: int = DEFAULT_ITERATIONS
+) -> Game:
+    """Start (or restart) the game and return it.
+
+    Order matters. The Universe loads its saved state, then its thread starts,
+    then the Broker loads its own and finishes unfinished operations, then the
+    Broker thread starts. If anything fails on the way, the threads already
+    started are stopped again.
+    """
+    if not isinstance(world_file, Path):
+        raise TypeError(f"world_file must be a Path, not {type(world_file).__name__}")
+    if not isinstance(state_dir, Path):
+        raise TypeError(f"state_dir must be a Path, not {type(state_dir).__name__}")
+
+    raw = json.loads(world_file.read_text(encoding="utf-8"))
+    world = StandardWorldLoader().build(raw)
+    universe = Universe(
+        world, Deposits.from_raw(raw), JsonUniverseRepository(state_dir / UNIVERSE_FILE)
+    )
+    key = load_or_create_key(state_dir / SERVER_KEY_FILE)
+    accounts = AccountRegistry(JsonAccountRepository(state_dir / ACCOUNTS_FILE), iterations)
+
+    with ExitStack() as stack:
+        universe_server = UniverseServer(universe)
+        universe_server.start()
+        stack.callback(universe_server.stop)
+
+        channel = AuthenticatedChannel(
+            ThreadedChannel(universe_server),
+            ServerIdentity("broker", key),
+            ServerIdentity("universe", key),
+        )
+        broker = Broker(channel, JsonInventoryRepository(state_dir / PLAYERS_FILE))
+        broker.recover()
+
+        broker_server = BrokerServer(broker)
+        broker_server.start()
+        stack.callback(broker_server.stop)
+
+        front = Front(accounts, SessionBook(), broker_server, world.start_room.room_id)
+        # Hand the stack to the Game, so leaving this block does not stop anything.
+        return Game(front, stack.pop_all())
