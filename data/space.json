@@ -1,6 +1,6 @@
 {
   "start": "earth",
-  "rooms": [
+  "destinations": [
     {
       "id": "earth",
       "name": "Earth",
