@@ -168,6 +168,7 @@ class JsonInventoryRepository(InventoryRepository):
             temporary.unlink(missing_ok=True)
             raise
 
+
     @staticmethod
     def _encode(request: Request) -> dict[str, Any]:
         return {
@@ -176,7 +177,10 @@ class JsonInventoryRepository(InventoryRepository):
             "player_id": request.player_id,
             "item_id": request.item_id,
             "amount": request.amount,
+            "name": request.name,
         }
+
+
 
     def _read(self) -> tuple[Records, Resources, list[Request]]:
         if not self._path.exists():
@@ -279,4 +283,9 @@ class JsonInventoryRepository(InventoryRepository):
         seen.add(op_id)
         # Built only after every part is checked, so a bad file raises
         # CorruptStoreError and never a bare ValueError from Request.
-        return Request(op_id, action, player_id, item_id, amount)
+        name = body.get("name")
+        if name is not None and (not isinstance(name, str) or not name):
+            raise self._corrupt(f"has a bad name for {op_id}")
+        # Built only after every part is checked, so a bad file raises
+        # CorruptStoreError and never a bare ValueError from Request.
+        return Request(op_id, action, player_id, item_id, amount, name)

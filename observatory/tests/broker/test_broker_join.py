@@ -31,7 +31,7 @@ class TestJoin(unittest.TestCase):
     def test_a_new_player_gets_a_record_a_torch_and_a_place(self) -> None:
         self.assertIsNone(self.broker.join("ada", "earth"))
         self.assertTrue(self.broker.has_player("ada"))
-        self.assertIsNotNone(self.broker.inventory_of("ada").find("torch"))
+        self.assertIsNotNone(self.broker.inventory_of("ada").resolve("torch"))
         self.assertEqual("earth", self.universe.location_of("ada"))
 
     def test_joining_again_gives_no_second_torch_and_does_not_move_the_player(self) -> None:
@@ -55,7 +55,7 @@ class TestJoin(unittest.TestCase):
         again = Broker(InMemoryChannel(self.universe), repository)
         self.assertEqual(1, again.recover())
         self.assertEqual("earth", self.universe.location_of("ada"))
-        self.assertIsNotNone(again.inventory_of("ada").find("torch"))
+        self.assertIsNotNone(again.inventory_of("ada").resolve("torch"))
 
     def test_empty_arguments_are_refused(self) -> None:
         with self.assertRaises(ValueError):

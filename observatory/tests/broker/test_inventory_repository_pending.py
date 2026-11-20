@@ -117,6 +117,39 @@ class TestJsonPending(unittest.TestCase):
                 with self.assertRaises(CorruptStoreError):
                     self.repository.load_pending()
 
+class TestNameInPending(unittest.TestCase):
+    def setUp(self) -> None:
+        self.directory = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.directory)
+        self.path = self.directory / "players.json"
+
+    def test_a_name_round_trips_in_both_repositories(self) -> None:
+        named = Request("op3", "add_item", "ada", "torch-1", name="torch")
+        for repository in (InMemoryInventoryRepository(), JsonInventoryRepository(self.path)):
+            with self.subTest(repository=type(repository).__name__):
+                repository.save({"ada": [("torch-1", "torch")]}, None, [named])
+                self.assertEqual("torch", repository.load_pending()[0].name)
+
+    def write(self, **changes: object) -> JsonInventoryRepository:
+        body = {"op_id": "op1", "action": "add_item", "player_id": "ada",
+                "item_id": "torch-1", "amount": 1, **changes}
+        body = {key: value for key, value in body.items() if value is not ...}
+        self.path.write_text(json.dumps({
+            "version": 3,
+            "players": {"ada": {"items": [{"id": "torch-1", "name": "torch"}], "resources": {}}},
+            "pending": [body],
+        }), encoding="utf-8")
+        return JsonInventoryRepository(self.path)
+
+    def test_an_operation_saved_without_a_name_still_loads(self) -> None:
+        self.assertIsNone(self.write().load_pending()[0].name)
+
+    def test_a_bad_name_is_refused(self) -> None:
+        for name in ("", 5):
+            with self.subTest(name=name):
+                with self.assertRaises(CorruptStoreError):
+                    self.write(name=name).load_pending()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -79,6 +79,11 @@ class TestRestart(unittest.TestCase):
         universe.handle(mine("op9"))
         self.assertEqual(4, deposits.available("earth", "iron"))
 
+    def test_a_dropped_item_keeps_its_name_after_a_restart(self) -> None:
+        self.universe.handle(Request("op5", "add_item", "ada", "torch-1", name="torch"))
+        _, _, earth = self.start(self.repository)
+        self.assertEqual("torch", earth.find_item("torch-1").name)
+
 
 class TestSavedStateIsChecked(unittest.TestCase):
     def a_world(self) -> World:

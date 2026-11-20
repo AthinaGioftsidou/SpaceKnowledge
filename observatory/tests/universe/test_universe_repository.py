@@ -161,6 +161,31 @@ class TestItemsInAnswers(unittest.TestCase):
                 with self.assertRaises(CorruptStateError):
                     self.repository.load()
 
+class TestNames(unittest.TestCase):
+    def setUp(self) -> None:
+        self.directory = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.directory)
+        self.path = self.directory / "universe.json"
+        self.repository = JsonUniverseRepository(self.path)
+
+    def test_names_round_trip_in_both_repositories(self) -> None:
+        state = UniverseState({}, {}, {"earth": ["torch-1"]}, {}, {"torch-1": "torch"})
+        for repository in (self.repository, InMemoryUniverseRepository()):
+            with self.subTest(repository=type(repository).__name__):
+                repository.save(state)
+                self.assertEqual({"torch-1": "torch"}, repository.load().names)
+
+    def test_a_file_written_before_names_existed_still_loads(self) -> None:
+        self.path.write_text(document(), encoding="utf-8")
+        self.assertEqual({}, self.repository.load().names)
+
+    def test_bad_names_are_refused(self) -> None:
+        for names in ([], {"": "torch"}, {"t": ""}, {"t": 5}):
+            with self.subTest(names=names):
+                self.path.write_text(document(names=names), encoding="utf-8")
+                with self.assertRaises(CorruptStateError):
+                    self.repository.load()
+
 
 if __name__ == "__main__":
     unittest.main()

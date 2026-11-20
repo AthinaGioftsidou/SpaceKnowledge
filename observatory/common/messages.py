@@ -8,7 +8,13 @@ class Request:
     """What the Broker asks the Universe to do. Read-only once made."""
 
     def __init__(
-        self, op_id: str, action: str, player_id: str, item_id: str, amount: int = 1
+        self,
+        op_id: str,
+        action: str,
+        player_id: str,
+        item_id: str,
+        amount: int = 1,
+        name: str | None = None,
     ) -> None:
         if not op_id:
             raise ValueError("op_id must not be empty")
@@ -22,11 +28,14 @@ class Request:
             raise TypeError(f"amount must be an int, not {type(amount).__name__}")
         if amount < 1:
             raise ValueError("amount must be at least 1")
+        if name is not None and (not isinstance(name, str) or not name):
+            raise ValueError("name must be a non-empty string, or left out")
         self._op_id = op_id
         self._action = action
         self._player_id = player_id
         self._item_id = item_id
         self._amount = amount
+        self._name = name
 
     @property
     def op_id(self) -> str:
@@ -47,6 +56,16 @@ class Request:
     @property
     def amount(self) -> int:
         return self._amount
+
+    @property
+    def name(self) -> str | None:
+        """The display name, if the sender gave one."""
+        return self._name
+
+    @property
+    def display_name(self) -> str:
+        """The name to show: the given one, or the id when none was given."""
+        return self._name if self._name is not None else self._item_id
 
 @dataclass(frozen=True)
 class ItemInfo:

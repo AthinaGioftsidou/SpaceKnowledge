@@ -90,9 +90,9 @@ class Broker:
     def join(self, player_id: str, destination: str) -> Refusal | None:
         """Make sure the player exists here and has a place in the Universe.
 
-        A new player gets a record and the starting items. Joining again
-        changes nothing, because the Universe leaves a placed player where
-        they are. None if all is well, otherwise why not.
+        A new player gets a record and the starting items, each with its own
+        unique id. Joining again changes nothing, because the Universe leaves a
+        placed player where they are. None if all is well, otherwise why not.
         """
         if not player_id:
             raise ValueError("player_id must not be empty")
@@ -100,19 +100,27 @@ class Broker:
             raise ValueError("destination must not be empty")
         if player_id not in self._inventories:
             self.add_player(player_id)
-            for item_id, name in STARTING_ITEMS:
-                self.give(player_id, InventoryEntry(item_id, name))
+            for base_id, name in STARTING_ITEMS:
+                unique_id = f"{base_id}-{uuid4().hex[:6]}"
+                self.give(player_id, InventoryEntry(unique_id, name))
         return self._send(Request(self._next_op_id(), "join", player_id, destination))
 
-    def drop(self, player_id: str, item_id: str) -> Refusal | None:
-        """None if the item is now in the world, otherwise why not."""
+    def drop(self, player_id: str, term: str) -> Refusal | None:
+        """Drop what the player carries that is called `term` (an id or a name).
+        None if the item is now in the world, otherwise why not."""
         inventory = self._inventories.get(player_id)
         if inventory is None:
-            return self._unknown_player(f"drop {item_id}", player_id)
-        refusal = inventory.begin_drop(item_id)
+            return self._unknown_player(f"drop {term}", player_id)
+        entry = inventory.resolve(term)
+        if entry is None:
+            return inventory.not_carried("drop", term)
+        refusal = inventory.begin_drop(entry.item_id)
         if refusal is not None:
             return refusal
-        return self._send(Request(self._next_op_id(), "add_item", player_id, item_id))
+        request = Request(
+            self._next_op_id(), "add_item", player_id, entry.item_id, name=entry.name
+        )
+        return self._send(request)
 
     def mine(self, player_id: str, resource: str, amount: int) -> Refusal | None:
         """None if the resource is now in the player's bag, otherwise why not.
@@ -177,23 +185,20 @@ class Broker:
 
     @staticmethod
     def _choose(seen: list[ItemProxy], term: str) -> ItemProxy | Refusal:
-        """The one proxy that `term` means: an id first, then a name."""
+        """The proxy that `term` means: an exact id first, then a name. Items
+        that share a name are interchangeable, so the first by id is taken."""
         wanted = term.strip().lower()
         by_id = [proxy for proxy in seen if proxy.item_id.lower() == wanted]
-        by_name = [proxy for proxy in seen if proxy.name.lower() == wanted]
+        by_name = sorted(
+            (proxy for proxy in seen if proxy.name.lower() == wanted),
+            key=lambda proxy: proxy.item_id,
+        )
         matches = by_id or by_name
         if not matches:
             return Refusal(
                 f"pick up {term}",
                 f"there is no {term} on the ground here",
                 "type look to see what lies here",
-            )
-        if len(matches) > 1:
-            ids = ", ".join(sorted(proxy.item_id for proxy in matches))
-            return Refusal(
-                f"pick up {term}",
-                f"more than one thing is called {term}",
-                f"use one of these ids: {ids}",
             )
         return matches[0]
 

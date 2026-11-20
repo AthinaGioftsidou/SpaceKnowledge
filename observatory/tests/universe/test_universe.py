@@ -299,5 +299,25 @@ class TestPick(unittest.TestCase):
         self.assertEqual(["torch"], [i.item_id for i in replay.items])
         self.assertIsNone(hall.find_item("torch"))
 
+class TestDropNames(unittest.TestCase):
+    def test_a_dropped_item_keeps_its_display_name_and_its_own_id(self) -> None:
+        universe, hall = a_universe()
+        response = universe.handle(Request("op1", "add_item", "ada", "torch-1", name="torch"))
+        self.assertTrue(response.ok)
+        self.assertEqual("torch", hall.find_item("torch-1").name)
+
+    def test_two_items_with_one_name_can_lie_together(self) -> None:
+        universe, hall = a_universe()
+        universe.handle(Request("op1", "add_item", "ada", "torch-1", name="torch"))
+        self.assertTrue(
+            universe.handle(Request("op2", "add_item", "ada", "torch-2", name="torch")).ok)
+        self.assertEqual(2, hall.item_count())
+
+    def test_look_shows_the_names_not_the_ids(self) -> None:
+        universe, _ = a_universe()
+        universe.handle(Request("op1", "add_item", "ada", "torch-1", name="torch"))
+        items = universe.handle(Request("l1", "look", "ada", "here")).items
+        self.assertEqual([("torch-1", "torch")], [(i.item_id, i.name) for i in items])
+
 if __name__ == "__main__":
     unittest.main()

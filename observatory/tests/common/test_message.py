@@ -90,5 +90,19 @@ class TestItemInfoAndItems(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "must be"):
             Response("op1", items=["torch"])  # type: ignore[arg-type]
 
+class TestRequestName(unittest.TestCase):
+    def test_the_name_is_optional_and_the_display_name_falls_back_to_the_id(self) -> None:
+        plain = Request("op1", "add_item", "ada", "torch-1")
+        self.assertIsNone(plain.name)
+        self.assertEqual("torch-1", plain.display_name)
+
+    def test_a_name_is_kept(self) -> None:
+        named = Request("op1", "add_item", "ada", "torch-1", name="torch")
+        self.assertEqual(("torch", "torch"), (named.name, named.display_name))
+
+    def test_an_empty_name_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            Request("op1", "add_item", "ada", "torch-1", name="")
+
 if __name__ == "__main__":
     unittest.main()

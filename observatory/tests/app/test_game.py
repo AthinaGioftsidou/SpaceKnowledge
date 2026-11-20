@@ -75,13 +75,15 @@ class TestGame(unittest.TestCase):
         token = again.front.login("ada", PASSWORD)
         self.assertEqual("You are carrying nothing.", again.front.submit(token, "inventory"))
 
-    def test_players_have_separate_bags_and_one_torch_each(self) -> None:
+    def test_players_have_separate_bags_and_each_their_own_torch(self) -> None:
         game = self.start()
         ada, bob = self.signed_in(game, "ada"), self.signed_in(game, "bob")
         game.front.submit(ada, "mine iron 2")
         self.assertEqual("You are carrying: torch", game.front.submit(bob, "inventory"))
-        game.front.submit(ada, "drop torch")
-        self.assertIn("already a torch", game.front.submit(bob, "drop torch"))
+        self.assertEqual("You drop the torch.", game.front.submit(ada, "drop torch"))
+        # The bug your professor hit: before, this second drop was refused.
+        self.assertEqual("You drop the torch.", game.front.submit(bob, "drop torch"))
+        self.assertEqual("On the ground here: torch, torch", game.front.submit(bob, "look"))
 
     def test_two_players_mining_at_once_lose_nothing(self) -> None:
         game = self.start()

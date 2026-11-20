@@ -2,7 +2,7 @@
 
 import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +24,8 @@ class UniverseState:
     stock: Stock                     # destination id -> resource -> quantity left
     dropped: dict[str, list[str]]    # destination id -> ids of items dropped there
     answers: dict[str, Response]     # op_id -> the answer already given
+    # item id -> display name, for the items in `dropped`. Older files have none.
+    names: dict[str, str] = field(default_factory=dict)
 
 
 class UniverseRepository(ABC):
@@ -44,6 +46,7 @@ def _copy_state(state: UniverseState) -> UniverseState:
         {room_id: dict(resources) for room_id, resources in state.stock.items()},
         {room_id: list(item_ids) for room_id, item_ids in state.dropped.items()},
         dict(state.answers),  # Responses are read-only, so sharing them is safe
+        dict(state.names),
     )
 
 
@@ -84,6 +87,7 @@ class JsonUniverseRepository(UniverseRepository):
             "stock": state.stock,
             "dropped": state.dropped,
             "answers": {op_id: self._encode(r) for op_id, r in state.answers.items()},
+            "names": state.names,
         }
         write_json_atomically(self._path, document)
 
@@ -125,7 +129,15 @@ class JsonUniverseRepository(UniverseRepository):
             self._check_stock(raw.get("stock")),
             self._check_dropped(raw.get("dropped")),
             self._check_answers(raw.get("answers")),
+            self._check_names(raw.get("names", {})),
         )
+
+    def _check_names(self, raw: Any) -> dict[str, str]:
+        names: dict[str, str] = {}
+        for item_id, name in self._object(raw, "names").items():
+            key = self._text(item_id, "an item id in names")
+            names[key] = self._text(name, f"a display name for {key}")
+        return names
 
     def _object(self, value: Any, section: str) -> dict[str, Any]:
         if not isinstance(value, dict):

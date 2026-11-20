@@ -88,6 +88,27 @@ class TestDropping(unittest.TestCase):
             with self.subTest(move=move.__name__):
                 self.assertIsInstance(move("lantern"), Refusal)
 
+class TestResolve(unittest.TestCase):
+    def two_torches(self) -> PlayerInventory:
+        inventory = PlayerInventory()
+        inventory.add(InventoryEntry("torch-b", "torch"))
+        inventory.add(InventoryEntry("torch-a", "torch"))
+        return inventory
+
+    def test_an_id_wins(self) -> None:
+        self.assertEqual("torch-b", self.two_torches().resolve("torch-b").item_id)
+
+    def test_a_name_picks_the_first_by_id_and_ignores_case(self) -> None:
+        self.assertEqual("torch-a", self.two_torches().resolve("Torch").item_id)
+
+    def test_a_usable_one_is_preferred_to_one_that_is_in_flight(self) -> None:
+        inventory = self.two_torches()
+        inventory.begin_drop("torch-a")
+        self.assertEqual("torch-b", inventory.resolve("torch").item_id)
+
+    def test_nothing_matching_gives_none(self) -> None:
+        self.assertIsNone(self.two_torches().resolve("lantern"))
+
 
 if __name__ == "__main__":
     unittest.main()
