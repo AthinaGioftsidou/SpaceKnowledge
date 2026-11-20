@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "locations": {
+    "ada": "earth",
+    "bob": "earth"
+  },
+  "stock": {
+    "earth": {
+      "iron": 500,
+      "wood": 300,
+      "water": 800
+    },
+    "moon": {
+      "helium_3": 100
+    },
+    "mars": {
+      "nickel": 200
+    }
+  },
+  "dropped": {
+    "earth": []
+  },
+  "answers": {
+    "07e32358-op1": {
+      "ok": true
+    },
+    "d6ed2ff0-op1": {
+      "ok": true
+    },
+    "07e32358-op2": {
+      "ok": true
+    },
+    "d6ed2ff0-op4": {
+      "ok": true,
+      "items": [
+        {
+          "id": "torch-08b993",
+          "name": "torch",
+          "description": "a torch"
+        }
+      ]
+    }
+  },
+  "names": {}
+}

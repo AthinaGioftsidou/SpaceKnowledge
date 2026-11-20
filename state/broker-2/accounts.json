@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "accounts": {
+    "bob": {
+      "salt": "d7807c1dfad33b41ae52a1b435b3ec64",
+      "iterations": 200000,
+      "hash": "0a2f9e64d1437a89803a906a05d2a163f576afbb7f714aaa891fea655206e670"
+    }
+  }
+}

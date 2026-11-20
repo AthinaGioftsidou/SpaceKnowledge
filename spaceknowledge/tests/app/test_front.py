@@ -85,6 +85,12 @@ class TestTheTokenIsTheIdentity(unittest.TestCase):
         front.submit(first, "mine iron 1")
         self.assertIn("iron 1", front.submit(second, "inventory"))
 
+    def test_command_gives_a_refusal_object_for_a_bad_token_and_text_for_a_good_one(self) -> None:
+        front, _ = a_front(self)
+        self.assertIsInstance(front.command("nope", "look"), Refusal)
+        token = token_of(front.login("ada", PASSWORD))
+        self.assertIsInstance(front.command(token, "inventory"), str)
+
 
 class TestArguments(unittest.TestCase):
     def test_bad_arguments_are_refused(self) -> None:

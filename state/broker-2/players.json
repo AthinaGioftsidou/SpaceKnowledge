@@ -1,0 +1,19 @@
+{
+  "version": 3,
+  "players": {
+    "bob": {
+      "items": [
+        {
+          "id": "torch-732e8b",
+          "name": "torch"
+        },
+        {
+          "id": "torch-08b993",
+          "name": "torch"
+        }
+      ],
+      "resources": {}
+    }
+  },
+  "pending": []
+}

@@ -83,15 +83,21 @@ class Front:
     def logout(self, token: str) -> bool:
         return self._sessions.close(token)
 
-    def submit(self, token: str, line: str, timeout: float = 5.0) -> str:
+    def command(self, token: str, line: str, timeout: float = 5.0) -> str | Refusal:
+        """The reply text, or a Refusal if the token is not (or no longer) valid."""
         player = self._sessions.player_for(token)
         if player is None:
             return Refusal(
                 "send a command",
                 "you are not logged in",
                 "log in first, then send your command with the token you were given",
-            ).describe()
+            )
         return self._server.submit(player, line, timeout)
+
+    def submit(self, token: str, line: str, timeout: float = 5.0) -> str:
+        """Like `command`, but always text: a refusal is described."""
+        result = self.command(token, line, timeout)
+        return result.describe() if isinstance(result, Refusal) else result
 
     @staticmethod
     def _paused() -> Refusal:
