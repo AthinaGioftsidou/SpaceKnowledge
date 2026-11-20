@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Space Knowledge</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="planet-space">
+  <main>
+    <h1>Space Knowledge</h1>
+
+    <section id="login-panel">
+      <form id="auth" autocomplete="off">
+        <input id="username" placeholder="name" maxlength="20" size="14" required>
+        <input id="password" placeholder="password" type="password" maxlength="128" size="14" required>
+        <button type="submit">Log in</button>
+        <button type="button" id="register-button">Register</button>
+      </form>
+    </section>
+
+    <section id="game" hidden>
+      <div class="layout">
+        <pre id="console" aria-live="polite" tabindex="0"></pre>
+        <aside id="panel">
+          <h2>Where</h2>
+          <p id="where">-</p>
+          <h2>Items</h2>
+          <ul id="items"></ul>
+          <h2>Resources</h2>
+          <ul id="resources"></ul>
+        </aside>
+      </div>
+      <form id="command-form" autocomplete="off">
+        <input id="line" placeholder="look, where, mine iron 3, drop torch, pick torch, inventory" maxlength="200" autofocus>
+        <button type="submit">Send</button>
+        <button type="button" id="logout-button">Log out</button>
+      </form>
+    </section>
+
+    <p id="status" role="status"></p>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

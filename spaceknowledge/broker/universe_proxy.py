@@ -36,6 +36,17 @@ class UniverseProxy:
             return response.refusal  # type: ignore[return-value]
         return [ItemProxy(info, self.pick) for info in response.items]
 
+    def where(self, player_id: str) -> tuple[str, str] | Refusal:
+        """The id and name of the destination the player is in."""
+        response = self._channel.send(Request(self._next_op_id(), "where", player_id, "here"))
+        if not response.ok:
+            return response.refusal  # type: ignore[return-value]
+        if len(response.items) != 1:
+            return Refusal("find out where you are", "the game gave an unexpected answer",
+                           "try again in a moment")
+        place = response.items[0]
+        return place.item_id, place.name
+
     def pick(self, proxy: ItemProxy, player_id: str) -> Refusal | None:
         """Put the proxy in flight, then send the pick through the Broker's
         crash-safe path. A proxy already in flight is refused, and nothing is sent."""

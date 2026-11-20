@@ -110,3 +110,12 @@ class PickCommand(Command):
         if refusal is not None:
             return refusal.describe()
         return f"You pick up the {self._target}."
+
+class WhereCommand(Command):
+    def execute(self, broker: Broker, player_id: str) -> str:
+        if not isinstance(broker, Broker):
+            raise TypeError(f"broker must be a Broker, not {type(broker).__name__}")
+        result = broker.where(player_id)
+        if isinstance(result, Refusal):
+            return result.describe()
+        return f"You are at {result[1]}."

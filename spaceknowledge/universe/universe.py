@@ -16,7 +16,7 @@ from spaceknowledge.world.item import Item, PlainItem
 from spaceknowledge.world.world import World
 
 # Questions that change nothing. Their answers are not remembered or saved.
-READ_ONLY = ("look",)
+READ_ONLY = ("look", "where")
 # How many answered operations are remembered. It must be larger than the
 # number of operations that can be unfinished at once, because an answer that
 # has been forgotten is decided again.
@@ -69,6 +69,7 @@ class Universe:
             "join": self._join,
             "look": self._look,
             "pick": self._pick,
+            "where": self._where,
         }
         self._restore()
 
@@ -182,6 +183,19 @@ class Universe:
             return self._unknown_player(request)
         items = sorted(destination.contents(), key=lambda item: item.item_id)
         return Response(request.op_id, items=tuple(self._info(item) for item in items))
+    
+    def _where(self, request: Request) -> Response:
+        """Where the player is, as plain place data (an id, a name and a
+        description). Changes nothing."""
+        destination = self._destination_of(request)
+        if destination is None:
+            return self._unknown_player(request)
+        place = ItemInfo(
+            destination.destination_id,
+            destination.name,
+            destination.description or destination.name,
+        )
+        return Response(request.op_id, items=(place,))
 
     def _pick(self, request: Request) -> Response:
         """Is it ok to pick this up? If yes, the real item leaves the world and

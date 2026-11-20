@@ -7,6 +7,7 @@ from spaceknowledge.broker.command import (
     LookCommand,
     MineCommand,
     PickCommand,
+    WhereCommand
 )
 
 
@@ -20,6 +21,7 @@ _NO_ARGUMENT = {
     "i": InventoryCommand,
     "look": LookCommand,
     "l": LookCommand,
+    "where": WhereCommand
 }
 
 _ONE_ARGUMENT = {

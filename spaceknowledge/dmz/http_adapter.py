@@ -1,8 +1,9 @@
 """ADAPTER and DMZ server. HTTP in, Front calls out; Front answers in, JSON out.
 
 Nothing here decides what the game does. It translates, checks the request
-against the boundary in http_protocol, and hides everything internal. The
-Broker and the Universe do not know they are being called over HTTP.
+against the boundary in http_protocol, serves the three web pages, and hides
+everything internal. The Broker and the Universe do not know they are being
+called over HTTP, or from a browser.
 """
 
 import json
@@ -31,12 +32,21 @@ from spaceknowledge.dmz.http_protocol import (
     scrub,
     text_field,
 )
+from spaceknowledge.dmz.web_assets import WEB_DIR, Asset, load_assets
 
 # Where these lines go is decided once, by the program that opens the log.
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
 
 Reply = tuple[int, dict[str, Any]]
+
+# The page may load scripts and styles from this server only, may talk only to
+# this server, and may not be framed. No inline script or style is allowed, so
+# injected markup cannot run.
+PAGE_POLICY = (
+    "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; "
+    "img-src data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+)
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -69,6 +79,12 @@ class _Handler(BaseHTTPRequestHandler):
         request_id = secrets.token_hex(4)
         started = time.monotonic()
         path = self.path.split("?", 1)[0]
+        # Looked up in a fixed table, never turned into a file path.
+        asset = self.server.assets.get(path) if method == "GET" else None
+        if asset is not None:
+            self._log_request(method, path, 200, request_id, started)
+            self._send_asset(asset, request_id)
+            return
         try:
             status, body = self._route(method, path)
         except HttpProblem as refused:
@@ -87,11 +103,15 @@ class _Handler(BaseHTTPRequestHandler):
             status, body = 500, refusal_body(Refusal(
                 "handle the request", "something went wrong inside the game",
                 "try again, and tell the administrator if it keeps happening"))
-        elapsed = (time.monotonic() - started) * 1000
-        # Logged BEFORE answering, so the record exists once the client has its
-        # answer. Never the body, the password or the token.
-        log.info("%s %r -> %d [%s] %.1f ms", method, path[:60], status, request_id, elapsed)
+        self._log_request(method, path, status, request_id, started)
         self._send(status, body, request_id)
+
+    @staticmethod
+    def _log_request(method: str, path: str, status: int, request_id: str, started: float) -> None:
+        """Logged BEFORE answering, so the record exists once the client has its
+        answer. Never the body, the password or the token."""
+        elapsed = (time.monotonic() - started) * 1000
+        log.info("%s %r -> %d [%s] %.1f ms", method, path[:60], status, request_id, elapsed)
 
     def _route(self, method: str, path: str) -> Reply:
         if method == "GET":
@@ -117,7 +137,7 @@ class _Handler(BaseHTTPRequestHandler):
     @staticmethod
     def _not_found() -> HttpProblem:
         return problem(404, "find that page", "there is nothing at that address",
-                       "use /health, /register, /login, /logout or /command")
+                       "use /, /health, /register, /login, /logout or /command")
 
     def _read_body(self) -> bytes:
         text = self.headers.get("Content-Length", "0")
@@ -174,13 +194,26 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _send(self, status: int, body: dict[str, Any], request_id: str) -> None:
         data = json.dumps(body).encode("utf-8")
+        self._write(status, data, "application/json; charset=utf-8", request_id, {})
+
+    def _send_asset(self, asset: Asset, request_id: str) -> None:
+        self._write(200, asset.data, asset.content_type, request_id, {
+            "Content-Security-Policy": PAGE_POLICY,
+            "X-Frame-Options": "DENY",
+            "Referrer-Policy": "no-referrer",
+        })
+
+    def _write(self, status: int, data: bytes, content_type: str, request_id: str,
+               extra: dict[str, str]) -> None:
         try:
             self.send_response(status)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Request-Id", request_id)
+            for name, value in extra.items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(data)
         except OSError:
@@ -193,9 +226,11 @@ class _HttpServer(ThreadingHTTPServer):
     block_on_close = False
     allow_reuse_address = False
 
-    def __init__(self, address: tuple[str, int], front: Front, request_timeout: float) -> None:
+    def __init__(self, address: tuple[str, int], front: Front, request_timeout: float,
+                 assets: dict[str, Asset]) -> None:
         self.front = front
         self.request_timeout = request_timeout
+        self.assets = assets
         super().__init__(address, _Handler)
 
     def server_bind(self) -> None:
@@ -221,6 +256,7 @@ class DmzServer:
         host: str = "127.0.0.1",
         port: int = 0,
         request_timeout: float = 10.0,
+        assets: dict[str, Asset] | None = None,
     ) -> None:
         if not isinstance(front, Front):
             raise TypeError(f"front must be a Front, not {type(front).__name__}")
@@ -230,10 +266,11 @@ class DmzServer:
             raise ValueError("port must be a whole number from 0 to 65535")
         if request_timeout <= 0:
             raise ValueError("request_timeout must be more than 0 seconds")
+        pages = assets if assets is not None else load_assets(WEB_DIR)
         self._lock = threading.Lock()
         self._stopped = False
         self._thread: threading.Thread | None = None
-        self._server = _HttpServer((host, port), front, request_timeout)  # binds now
+        self._server = _HttpServer((host, port), front, request_timeout, pages)  # binds now
 
     @property
     def address(self) -> tuple[str, int]:

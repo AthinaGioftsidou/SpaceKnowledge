@@ -30,6 +30,10 @@ class Destination:
     def name(self) -> str:
         return self._name
 
+    @property
+    def description(self) -> str:
+        return self._description
+
     def add_item(self, item: Item) -> None:
         if not isinstance(item, Item):
             raise TypeError(f"item must be an Item, not {type(item).__name__}")

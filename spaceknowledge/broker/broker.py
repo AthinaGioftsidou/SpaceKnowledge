@@ -143,6 +143,12 @@ class Broker:
             return self._unknown_player("look", player_id)
         return self._universe.look(player_id)
 
+    def where(self, player_id: str) -> tuple[str, str] | Refusal:
+        """The (id, name) of the player's destination. Changes nothing."""
+        if player_id not in self._inventories:
+            return self._unknown_player("find out where you are", player_id)
+        return self._universe.where(player_id)
+
     def pick(self, player_id: str, term: str) -> Refusal | None:
         """Pick up what lies here and is called `term` (an id or a name).
         None if the item is now the player's, otherwise why not."""

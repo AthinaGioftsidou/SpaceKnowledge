@@ -1,29 +1,25 @@
-"""A Broker program: the customer console, with a Broker that talks to a
-separate Universe over a socket. Start the Universe first, then:
+"""A Broker program: a Broker with its own DMZ, talking to a separate Universe.
+Start the Universe first, then:
 
     python -m spaceknowledge.app.broker_program broker-1
 
-The name must be one of the brokers in settings.json. Each Broker has its own
-accounts and inventories in state/<name>/, and reads the shared server key
-from state/universe/. (In the next block the Broker becomes a server of its
-own and the console becomes a separate client.)
+The name must be one of the brokers in settings.json. The Broker keeps its own
+accounts and inventories in state/<name>/, reads the shared server key from
+state/universe/, and serves clients over HTTP on its own DMZ port (8400 for
+broker-1, 8401 for broker-2 with the default settings). Clients connect with
+`python -m spaceknowledge.client.program --port <that port>`.
 """
 
 import argparse
+import time
 from contextlib import ExitStack
 from datetime import date
-from getpass import getpass
 from pathlib import Path
 
-from spaceknowledge.app.customer_console import run_customer
 from spaceknowledge.app.front import Front
 from spaceknowledge.app.game import Game
 from spaceknowledge.app.keys import MissingKeyError, read_existing_key
-from spaceknowledge.app.layout import (
-    SETTINGS_FILE,
-    UNIVERSE_STATE_DIR,
-    broker_state_dir,
-)
+from spaceknowledge.app.layout import SETTINGS_FILE, UNIVERSE_STATE_DIR, broker_state_dir
 from spaceknowledge.app.paths import ACCOUNTS_FILE, PLAYERS_FILE, SERVER_KEY_FILE
 from spaceknowledge.app.settings import SettingsError, is_valid_name, load_settings
 from spaceknowledge.broker.broker import Broker
@@ -31,12 +27,17 @@ from spaceknowledge.broker.broker_server import BrokerServer
 from spaceknowledge.broker.inventory_repository import CorruptStoreError, JsonInventoryRepository
 from spaceknowledge.common.logfile import LOG_DIR, close_log, open_log
 from spaceknowledge.common.refusal import Refusal
+from spaceknowledge.dmz.http_adapter import DmzServer
 from spaceknowledge.transport.server_auth import CorruptKeyError, ServerIdentity
 from spaceknowledge.transport.socket_channel import SocketChannel
 from spaceknowledge.users.account_repository import CorruptAccountsError, JsonAccountRepository
 from spaceknowledge.users.accounts import AccountRegistry
 from spaceknowledge.users.credentials import DEFAULT_ITERATIONS
 from spaceknowledge.users.session_book import SessionBook
+
+# Clients are on this machine for now. Listening on every address would be a
+# deliberate decision, and needs TLS first.
+DMZ_HOST = "127.0.0.1"
 
 
 def build_broker(
@@ -78,8 +79,61 @@ def build_broker(
         return Game(front, stack.pop_all())
 
 
+class BrokerNode:
+    """A running Broker and the DMZ clients reach it through."""
+
+    def __init__(self, game: Game, dmz: DmzServer) -> None:
+        if not isinstance(game, Game):
+            raise TypeError(f"game must be a Game, not {type(game).__name__}")
+        if not isinstance(dmz, DmzServer):
+            raise TypeError(f"dmz must be a DmzServer, not {type(dmz).__name__}")
+        self._game = game
+        self._dmz = dmz
+
+    @property
+    def address(self) -> tuple[str, int]:
+        """Where clients connect: the DMZ, and nothing behind it."""
+        return self._dmz.address
+
+    def close(self) -> None:
+        """Stop the DMZ first, so no new request arrives, then the Broker.
+        Harmless to call twice."""
+        try:
+            self._dmz.stop()
+        finally:
+            self._game.close()
+
+
+def start_broker_node(
+    state_dir: Path,
+    key_file: Path,
+    host: str,
+    port: int,
+    start: str,
+    name: str,
+    dmz_host: str = DMZ_HOST,
+    dmz_port: int = 0,
+    iterations: int = DEFAULT_ITERATIONS,
+    timeout: float = 3.0,
+) -> BrokerNode:
+    """A Broker plus its DMZ. If the DMZ cannot start (for example its port is
+    taken), the Broker is stopped again and the error is raised. Port 0 lets
+    the system pick a free port."""
+    game = build_broker(state_dir, key_file, host, port, start, name, iterations, timeout)
+    dmz: DmzServer | None = None
+    try:
+        dmz = DmzServer(game.front, dmz_host, dmz_port)
+        dmz.start()
+    except BaseException:
+        if dmz is not None:
+            dmz.stop()
+        game.close()
+        raise
+    return BrokerNode(game, dmz)
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Start a Broker with a customer console.")
+    parser = argparse.ArgumentParser(description="Start a Broker and its DMZ.")
     parser.add_argument("name", help="this Broker's name, one of the brokers in settings.json")
     args = parser.parse_args(argv)
     handler = open_log(LOG_DIR, date.today())
@@ -88,24 +142,29 @@ def main(argv: list[str] | None = None) -> int:
             settings = load_settings(SETTINGS_FILE)
             if args.name not in settings.brokers:
                 raise SettingsError(f"{args.name} is not one of the brokers in settings.json")
-            game = build_broker(
+            node = start_broker_node(
                 broker_state_dir(args.name), UNIVERSE_STATE_DIR / SERVER_KEY_FILE,
                 settings.universe_host, settings.universe_port, settings.start, args.name,
+                DMZ_HOST, settings.dmz_port(args.name),
             )
         except (SettingsError, MissingKeyError, CorruptKeyError, CorruptStoreError,
-                CorruptAccountsError, ConnectionError, TimeoutError) as problem:
+                CorruptAccountsError, OSError) as problem:
             print(Refusal(
                 "start the Broker", str(problem),
                 "check that the Universe is running, that the name is in settings.json, "
-                "and that the files named above are intact",
+                "that its port is free, and that the files named above are intact",
             ).describe())
             return 1
+        host, port = node.address
+        print(f"{args.name} is ready. Clients connect to {host}:{port}.")
+        print("Press Ctrl+C to stop it.")
         try:
-            run_customer(game.front, input, getpass, print)
+            while True:
+                time.sleep(1)  # a loop, because one long wait is not interruptible on Windows
         except KeyboardInterrupt:
-            print("\nGoodbye.")
+            print("\nStopping.")
         finally:
-            game.close()
+            node.close()
         return 0
     finally:
         close_log(handler)

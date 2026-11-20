@@ -85,6 +85,21 @@ class TestArguments(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "must be"):
             UniverseProxy(channel, lambda: "op", "send")  # type: ignore[arg-type]
 
+class TestWhere(unittest.TestCase):
+    def test_the_place_comes_back_as_an_id_and_a_name(self) -> None:
+        universe, channel, _ = a_proxy(Response("x", items=(ItemInfo("earth", "Earth", "Home."),)))
+        self.assertEqual(("earth", "Earth"), universe.where("ada"))
+        self.assertEqual("where", channel.requests[0].action)
+
+    def test_a_refused_where_gives_the_refusal(self) -> None:
+        refusal = Refusal("where", "unknown player", "log in")
+        universe, _, _ = a_proxy(Response("x", refusal))
+        self.assertIs(refusal, universe.where("ada"))
+
+    def test_an_answer_that_is_not_exactly_one_place_is_refused(self) -> None:
+        universe, _, _ = a_proxy(Response("x"))
+        self.assertIsInstance(universe.where("ada"), Refusal)
+
 
 if __name__ == "__main__":
     unittest.main()

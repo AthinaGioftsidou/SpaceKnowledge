@@ -11,6 +11,7 @@ from spaceknowledge.universe.universe_repository import InMemoryUniverseReposito
 from spaceknowledge.world.container import Container
 
 
+
 def a_universe() -> tuple[Universe, Destination]:
     hall = Destination("hall", "Hall", "Cold and tiled.")
     universe = Universe(World({"hall": hall}, "hall"))
@@ -318,6 +319,30 @@ class TestDropNames(unittest.TestCase):
         universe.handle(Request("op1", "add_item", "ada", "torch-1", name="torch"))
         items = universe.handle(Request("l1", "look", "ada", "here")).items
         self.assertEqual([("torch-1", "torch")], [(i.item_id, i.name) for i in items])
+
+class TestWhere(unittest.TestCase):
+    def test_it_says_where_the_player_is_as_plain_place_data(self) -> None:
+        universe, _ = a_universe()
+        response = universe.handle(Request("w1", "where", "ada", "here"))
+        self.assertTrue(response.ok)
+        self.assertEqual([("hall", "Hall", "Cold and tiled.")],
+                         [(i.item_id, i.name, i.description) for i in response.items])
+
+    def test_a_where_is_never_remembered(self) -> None:
+        universe, _ = a_universe()
+        universe.handle(Request("w1", "where", "ada", "here"))
+        self.assertEqual(0, universe.answer_count())
+
+    def test_a_stranger_is_refused(self) -> None:
+        universe, _ = a_universe()
+        self.assertFalse(universe.handle(Request("w1", "where", "eve", "here")).ok)
+
+    def test_a_destination_with_no_description_falls_back_to_its_name(self) -> None:
+        bare = Destination("bare", "Bare", "")
+        universe = Universe(World({"bare": bare}, "bare"))
+        universe.place_player("ada", "bare")
+        items = universe.handle(Request("w1", "where", "ada", "here")).items
+        self.assertEqual("Bare", items[0].description)
 
 if __name__ == "__main__":
     unittest.main()

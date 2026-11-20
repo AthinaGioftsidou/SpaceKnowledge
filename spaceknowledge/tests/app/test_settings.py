@@ -48,6 +48,21 @@ class TestSettings(unittest.TestCase):
                 with self.assertRaises(SettingsError):
                     Settings(**kwargs)  # type: ignore[arg-type]
 
+    def test_each_broker_gets_its_own_dmz_port_after_the_base(self) -> None:
+        settings = Settings(dmz_base_port=9000)
+        self.assertEqual(
+            [9000, 9001], [settings.dmz_port("broker-1"), settings.dmz_port("broker-2")])
+        with self.assertRaises(SettingsError):
+            settings.dmz_port("broker-9")
+
+    def test_bad_dmz_ports_are_refused(self) -> None:
+        for kwargs in ({"dmz_base_port": 0}, {"dmz_base_port": 65535},
+                       {"dmz_base_port": True}, {"dmz_base_port": "8400"},
+                       {"dmz_base_port": 7400}, {"dmz_base_port": 7399}):
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(SettingsError):
+                    Settings(**kwargs)  # type: ignore[arg-type]
+
 
 class TestLoading(unittest.TestCase):
     def setUp(self) -> None:
@@ -80,6 +95,10 @@ class TestLoading(unittest.TestCase):
     def test_a_string_is_refused_where_a_path_is_expected(self) -> None:
         with self.assertRaisesRegex(TypeError, "must be"):
             load_settings("settings.json")  # type: ignore[arg-type]
+
+    def test_the_dmz_base_port_can_be_set_in_the_file(self) -> None:
+        self.path.write_text('{"dmz_base_port": 9000}', encoding="utf-8")
+        self.assertEqual(Settings(dmz_base_port=9000), load_settings(self.path))
 
 
 if __name__ == "__main__":

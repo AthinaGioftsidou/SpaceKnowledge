@@ -1,4 +1,5 @@
-"""Settings: where the Universe listens and which Brokers may connect."""
+"""Settings: where the Universe listens, which Brokers may connect, and which
+ports their DMZs use."""
 
 import json
 import re
@@ -6,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_PORT = 7400
+DEFAULT_DMZ_BASE_PORT = 8400
 
 # Names become folder names and peer names, so they are strictly limited.
 _NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,29}")
@@ -23,12 +25,17 @@ def is_valid_name(name: object) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    """Read-only. The defaults let everything start with no settings file."""
+    """Read-only. The defaults let everything start with no settings file.
+
+    Each Broker's DMZ listens on `dmz_base_port` plus the Broker's position in
+    `brokers`, so the first Broker gets the base port, the next one the port
+    after it, and so on."""
 
     universe_host: str = "127.0.0.1"
     universe_port: int = DEFAULT_PORT
     brokers: tuple[str, ...] = ("broker-1", "broker-2")
     start: str = "earth"
+    dmz_base_port: int = DEFAULT_DMZ_BASE_PORT
 
     def __post_init__(self) -> None:
         if not isinstance(self.universe_host, str) or not self.universe_host:
@@ -45,9 +52,23 @@ class Settings:
             raise SettingsError("a Broker name is listed twice")
         if not isinstance(self.start, str) or not self.start:
             raise SettingsError("start must be non-empty text")
+        base = self.dmz_base_port
+        if isinstance(base, bool) or not isinstance(base, int) or not 0 < base < 65536:
+            raise SettingsError("dmz_base_port must be a whole number from 1 to 65535")
+        last = base + len(self.brokers) - 1
+        if last >= 65536:
+            raise SettingsError("dmz_base_port leaves no room for every Broker's port")
+        if base <= port <= last:
+            raise SettingsError("the DMZ ports must not include the Universe's port")
+
+    def dmz_port(self, name: str) -> int:
+        """The port this Broker's DMZ listens on."""
+        if name not in self.brokers:
+            raise SettingsError(f"{name} is not one of the brokers")
+        return self.dmz_base_port + self.brokers.index(name)
 
 
-_FIELDS = {"universe_host", "universe_port", "brokers", "start"}
+_FIELDS = {"universe_host", "universe_port", "brokers", "start", "dmz_base_port"}
 
 
 def load_settings(path: Path) -> Settings:

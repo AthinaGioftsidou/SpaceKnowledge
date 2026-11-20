@@ -20,6 +20,9 @@ class TestDestinationConstruction(unittest.TestCase):
         destination = Destination("hall", "Entrance Hall", "Cold and tiled.")
         self.assertEqual(0, destination.item_count())
 
+    def test_the_description_is_readable(self) -> None:
+        self.assertEqual("Cold and tiled.", Destination("hall", "Hall", "Cold and tiled.").description)
+
 
 class TestDestinationItems(unittest.TestCase):
     def setUp(self) -> None:
