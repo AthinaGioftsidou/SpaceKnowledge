@@ -17,6 +17,10 @@ from spaceknowledge.world.world import World
 
 # Questions that change nothing. Their answers are not remembered or saved.
 READ_ONLY = ("look",)
+# How many answered operations are remembered. It must be larger than the
+# number of operations that can be unfinished at once, because an answer that
+# has been forgotten is decided again.
+DEFAULT_MAX_ANSWERS = 1000
 
 
 class Universe:
@@ -36,6 +40,7 @@ class Universe:
         world: World,
         deposits: Deposits | None = None,
         repository: UniverseRepository | None = None,
+        max_answers: int = DEFAULT_MAX_ANSWERS,
     ) -> None:
         if not isinstance(world, World):
             raise TypeError(f"world must be a World, not {type(world).__name__}")
@@ -45,6 +50,11 @@ class Universe:
             raise TypeError(
                 f"repository must be a UniverseRepository, not {type(repository).__name__}"
             )
+        if isinstance(max_answers, bool) or not isinstance(max_answers, int):
+            raise TypeError(f"max_answers must be an int, not {type(max_answers).__name__}")
+        if max_answers < 1:
+            raise ValueError("max_answers must be at least 1")
+        self._max_answers = max_answers
         self._world = world
         self._deposits = deposits if deposits is not None else Deposits({})
         self._repository = repository if repository is not None else InMemoryUniverseRepository()
@@ -76,6 +86,17 @@ class Universe:
         """The id of the destination the player is in, or None if unknown."""
         return self._locations.get(player_id)
 
+    def answer_count(self) -> int:
+        """How many answered operations are remembered. For tests and, later,
+        the admin view."""
+        return len(self._answers)
+
+    def _forget_old_answers(self) -> None:
+        """Keep the newest answers only. A dict keeps insertion order, so the
+        first key is always the oldest."""
+        while len(self._answers) > self._max_answers:
+            del self._answers[next(iter(self._answers))]
+
     def handle(self, request: Request) -> Response:
         if not isinstance(request, Request):
             raise TypeError(f"request must be a Request, not {type(request).__name__}")
@@ -86,6 +107,7 @@ class Universe:
             return earlier
         response = self._decide(request)
         self._answers[request.op_id] = response
+        self._forget_old_answers()
         self._save()
         return response
 
@@ -239,6 +261,7 @@ class Universe:
         self._locations = dict(state.locations)
         self._dropped = {d: list(ids) for d, ids in state.dropped.items()}
         self._answers = dict(state.answers)
+        self._forget_old_answers()
 
     def _check_against_world(self, state: UniverseState) -> None:
         named = [*state.locations.values(), *state.stock, *state.dropped]

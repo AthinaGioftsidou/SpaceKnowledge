@@ -1,10 +1,11 @@
 """REPOSITORY. Where the Broker keeps what players carry between runs."""
 
 import json
-import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
+
+from spaceknowledge.common.atomic_json import write_json_atomically
 
 from spaceknowledge.common.messages import Request
 
@@ -150,23 +151,14 @@ class JsonInventoryRepository(InventoryRepository):
                 "items": [{"id": item_id, "name": name} for item_id, name in items],
                 "resources": bags[player_id],
             }
-        document = {
-            "version": self.VERSION,
-            "players": players,
-            "pending": [self._encode(request) for request in waiting],
-        }
-
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self._path.with_name(self._path.name + ".tmp")
-        try:
-            with open(temporary, "w", encoding="utf-8") as handle:
-                handle.write(json.dumps(document, indent=2))
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, self._path)
-        except OSError:
-            temporary.unlink(missing_ok=True)
-            raise
+        write_json_atomically(
+            self._path,
+            {
+                "version": self.VERSION,
+                "players": players,
+                "pending": [self._encode(request) for request in waiting],
+            },
+        )
 
 
     @staticmethod

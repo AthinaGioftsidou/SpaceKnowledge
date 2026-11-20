@@ -69,7 +69,7 @@ class TestJson(unittest.TestCase):
 
     def test_a_failed_save_keeps_the_old_file_and_leaves_nothing_behind(self) -> None:
         self.repository.save(RECORDS)
-        target = "spaceknowledge.broker.inventory_repository.os.replace"
+        target = "spaceknowledge.common.atomic_json.os.replace"
         with patch(target, side_effect=OSError("disk full")):
             with self.assertRaises(OSError):
                 self.repository.save({"ada": []})
