@@ -119,3 +119,23 @@ class WhereCommand(Command):
         if isinstance(result, Refusal):
             return result.describe()
         return f"You are at {result[1]}."
+
+class FlyCommand(Command):
+    def __init__(self, target: str) -> None:
+        if not target:
+            raise ValueError("target must not be empty")
+        self._target = target
+
+    @property
+    def target(self) -> str:
+        return self._target
+
+    def execute(self, broker: Broker, player_id: str) -> str:
+        if not isinstance(broker, Broker):
+            raise TypeError(f"broker must be a Broker, not {type(broker).__name__}")
+        result = broker.fly(player_id, self._target)
+        if isinstance(result, Refusal):
+            return result.describe()
+        if result.description == result.name:
+            return f"You fly to {result.name}."
+        return f"You fly to {result.name}.\n{result.description}"

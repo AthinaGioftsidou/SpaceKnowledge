@@ -2,9 +2,9 @@
   "version": 1,
   "accounts": {
     "ada": {
-      "salt": "f40aba8cf10ae83bb8b0e61d0e8146c6",
+      "salt": "2f023d622ef424a7cd53d011ca35bf2c",
       "iterations": 200000,
-      "hash": "d24b911f530044fa487a700fb6911a996b621ba6ac686d49470f124cfd740ab7"
+      "hash": "f2ba1fc2065e1353672e04fa99c5c1dc83ecefaa4f00466f94c525c9f136c621"
     }
   }
 }

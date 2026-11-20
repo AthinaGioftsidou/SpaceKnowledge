@@ -2,9 +2,9 @@
   "version": 1,
   "accounts": {
     "bob": {
-      "salt": "d7807c1dfad33b41ae52a1b435b3ec64",
+      "salt": "f4b956260bd945595185e7ce56b9e3cb",
       "iterations": 200000,
-      "hash": "0a2f9e64d1437a89803a906a05d2a163f576afbb7f714aaa891fea655206e670"
+      "hash": "6b02b05fb23022c18df413aa2c0af8156c29e55fc981e13087ebe811530db9c3"
     }
   }
 }

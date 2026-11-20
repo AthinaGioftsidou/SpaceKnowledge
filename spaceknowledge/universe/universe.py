@@ -70,6 +70,7 @@ class Universe:
             "look": self._look,
             "pick": self._pick,
             "where": self._where,
+            "fly": self._fly,
         }
         self._restore()
 
@@ -184,18 +185,46 @@ class Universe:
         items = sorted(destination.contents(), key=lambda item: item.item_id)
         return Response(request.op_id, items=tuple(self._info(item) for item in items))
     
-    def _where(self, request: Request) -> Response:
-        """Where the player is, as plain place data (an id, a name and a
-        description). Changes nothing."""
-        destination = self._destination_of(request)
-        if destination is None:
-            return self._unknown_player(request)
-        place = ItemInfo(
+    @staticmethod
+    def _place(destination: Destination) -> ItemInfo:
+        """A destination as plain data: an id, a name and a description."""
+        return ItemInfo(
             destination.destination_id,
             destination.name,
             destination.description or destination.name,
         )
-        return Response(request.op_id, items=(place,))
+
+    def _where(self, request: Request) -> Response:
+        """Where the player is, as plain place data. Changes nothing."""
+        destination = self._destination_of(request)
+        if destination is None:
+            return self._unknown_player(request)
+        return Response(request.op_id, items=(self._place(destination),))
+
+    def _fly(self, request: Request) -> Response:
+        """Move the player along a route, if there is one and its door is open.
+        The answer names the place arrived at."""
+        here = self._destination_of(request)
+        if here is None:
+            return self._unknown_player(request)
+        target = here.exit_to(request.item_id)
+        routes = ", ".join(here.exits())
+        if target is None:
+            return self._refuse(
+                request,
+                f"there is no route to {request.item_id} from {here.name}",
+                f"fly to one of: {routes}" if routes
+                else f"{here.name} has no routes, so stay here",
+            )
+        door = here.door_to(request.item_id)
+        if door is not None and not door.is_passable():
+            return self._refuse(
+                request,
+                f"the way to {target.name} is shut ({door.refusal()})",
+                "complete what opens it, or fly somewhere else",
+            )
+        self._locations[request.player_id] = target.destination_id
+        return Response(request.op_id, items=(self._place(target),))
 
     def _pick(self, request: Request) -> Response:
         """Is it ok to pick this up? If yes, the real item leaves the world and

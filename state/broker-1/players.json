@@ -2,7 +2,12 @@
   "version": 3,
   "players": {
     "ada": {
-      "items": [],
+      "items": [
+        {
+          "id": "torch-67944d",
+          "name": "torch"
+        }
+      ],
       "resources": {}
     }
   },

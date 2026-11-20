@@ -18,28 +18,22 @@
     }
   },
   "dropped": {
-    "earth": []
+    "earth": [
+      "torch-0eece1"
+    ]
   },
   "answers": {
-    "07e32358-op1": {
+    "5e57687f-op1": {
       "ok": true
     },
-    "d6ed2ff0-op1": {
+    "e72d6e89-op1": {
       "ok": true
     },
-    "07e32358-op2": {
+    "e72d6e89-op5": {
       "ok": true
-    },
-    "d6ed2ff0-op4": {
-      "ok": true,
-      "items": [
-        {
-          "id": "torch-08b993",
-          "name": "torch",
-          "description": "a torch"
-        }
-      ]
     }
   },
-  "names": {}
+  "names": {
+    "torch-0eece1": "torch"
+  }
 }

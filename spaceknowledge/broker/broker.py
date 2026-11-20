@@ -14,12 +14,12 @@ from spaceknowledge.broker.item_proxy import ItemProxy
 from spaceknowledge.broker.player_inventory import PlayerInventory
 from spaceknowledge.broker.resource_bag import ResourceBag
 from spaceknowledge.broker.universe_proxy import UniverseProxy
-from spaceknowledge.common.messages import Request, Response
+from spaceknowledge.common.messages import ItemInfo, Request, Response
 from spaceknowledge.common.refusal import Refusal
 from spaceknowledge.transport.channel import UniverseChannel
 
 # The actions the Broker saves as pending. Looking is not one: it changes nothing.
-ACTIONS = ("add_item", "mine", "join", "pick")
+ACTIONS = ("add_item", "mine", "join", "pick", "fly")
 
 # What a brand new player is given, so that `drop` has something to drop.
 STARTING_ITEMS = (("torch", "torch"),)
@@ -149,6 +149,22 @@ class Broker:
             return self._unknown_player("find out where you are", player_id)
         return self._universe.where(player_id)
 
+    def fly(self, player_id: str, target: str) -> ItemInfo | Refusal:
+        """Fly to the destination called `target`. The place arrived at, or why not."""
+        if player_id not in self._inventories:
+            return self._unknown_player(f"fly to {target}", player_id)
+        wanted = target.strip().lower()
+        if not wanted:
+            return Refusal("fly", "no destination was given",
+                           "type fly and the name of a destination")
+        response = self._exchange(Request(self._next_op_id(), "fly", player_id, wanted))
+        if response.refusal is not None:
+            return response.refusal
+        if len(response.items) != 1:
+            return Refusal(f"fly to {wanted}", "the game gave an unexpected answer",
+                           "type where to see where you are")
+        return response.items[0]
+
     def pick(self, player_id: str, term: str) -> Refusal | None:
         """Pick up what lies here and is called `term` (an id or a name).
         None if the item is now the player's, otherwise why not."""
@@ -210,6 +226,11 @@ class Broker:
 
     def _send(self, request: Request, proxy: ItemProxy | None = None) -> Refusal | None:
         """Write the intention down, ask the Universe, then settle."""
+        return self._exchange(request, proxy).refusal
+
+    def _exchange(self, request: Request, proxy: ItemProxy | None = None) -> Response:
+        """Like `_send`, but hands back the whole answer, for actions whose
+        answer carries data."""
         if proxy is not None:
             self._proxies[request.op_id] = proxy
         self._pending[request.op_id] = request
@@ -225,7 +246,8 @@ class Broker:
                 waiting.cancel_pick()
             raise
         response = self._channel.send(request)
-        return self._settle(request, response)
+        self._settle(request, response)
+        return response
 
     def _settle(self, request: Request, response: Response) -> Refusal | None:
         """Apply the answer, cross the intention off, and save both together."""

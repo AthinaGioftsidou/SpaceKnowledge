@@ -3,11 +3,12 @@
 from spaceknowledge.broker.command import (
     Command,
     DropCommand,
+    FlyCommand,
     InventoryCommand,
     LookCommand,
     MineCommand,
     PickCommand,
-    WhereCommand
+    WhereCommand,
 )
 
 
@@ -21,7 +22,7 @@ _NO_ARGUMENT = {
     "i": InventoryCommand,
     "look": LookCommand,
     "l": LookCommand,
-    "where": WhereCommand
+    "where": WhereCommand,
 }
 
 _ONE_ARGUMENT = {
@@ -29,7 +30,17 @@ _ONE_ARGUMENT = {
     "pick": PickCommand,
     "take": PickCommand,
     "get": PickCommand,
+    "fly": FlyCommand,
+    "go": FlyCommand,
+    "travel": FlyCommand,
 }
+
+# A word that may sit between the verb and what it is about:
+# "pick UP the torch", "fly TO mars".
+_FILLER = {"pick": "up", "fly": "to", "go": "to", "travel": "to"}
+
+# What the verb is about, for the message when it is missing. Default: "item".
+_NOUNS = {"fly": "destination", "go": "destination", "travel": "destination"}
 
 # A name, then an optional whole number: "mine iron 3".
 _WITH_AMOUNT = {
@@ -52,9 +63,9 @@ class Parser:
                 raise ParseError(f"'{verb}' does not take anything after it")
             return _NO_ARGUMENT[verb]()
         if verb in _ONE_ARGUMENT:
-            if verb == "pick" and rest[:1] == ["up"]:
-                rest = rest[1:]  # "pick up the torch" means "pick the torch"
-            return _ONE_ARGUMENT[verb](self._name(verb, rest, "item"))
+            if rest[:1] == [_FILLER.get(verb)]:
+                rest = rest[1:]
+            return _ONE_ARGUMENT[verb](self._name(verb, rest, _NOUNS.get(verb, "item")))
         if verb in _WITH_AMOUNT:
             return self._parse_with_amount(verb, rest)
         raise ParseError(f"there is no verb called '{verb}'")

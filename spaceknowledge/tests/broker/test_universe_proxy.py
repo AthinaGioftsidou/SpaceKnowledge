@@ -100,6 +100,5 @@ class TestWhere(unittest.TestCase):
         universe, _, _ = a_proxy(Response("x"))
         self.assertIsInstance(universe.where("ada"), Refusal)
 
-
 if __name__ == "__main__":
     unittest.main()

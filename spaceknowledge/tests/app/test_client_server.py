@@ -24,6 +24,45 @@ def thread_names() -> set[str]:
 
 
 class TestClientsOverHttp(unittest.TestCase):
+    
+    def test_a_player_flies_and_each_place_has_its_own_stock_and_ground(self) -> None:
+        one, two = self.client(self.node("broker-1")), self.client(self.node("broker-2"))
+        ada, bob = self.signed_in(one, "ada"), self.signed_in(two, "bob")
+        self.assertIn("no nickel to mine", one.command(ada, "mine nickel 1"))
+        reply = one.command(ada, "fly to mars")
+        self.assertTrue(reply.startswith("You fly to Mars."))
+        self.assertIn("Nickel can be mined here.", reply)
+        self.assertEqual("You are at Mars.", one.command(ada, "where"))
+        self.assertEqual("You are at Earth.", two.command(bob, "where"))
+        self.assertEqual("You mine 5 nickel.", one.command(ada, "mine nickel 5"))
+        self.assertIn("no nickel to mine", two.command(bob, "mine nickel 1"))
+        self.assertEqual("You drop the torch.", one.command(ada, "drop torch"))
+        self.assertEqual("Nothing lies on the ground here.", two.command(bob, "look"))
+        two.command(bob, "fly mars")
+        self.assertEqual("On the ground here: torch", two.command(bob, "look"))
+
+    def test_a_flight_with_no_route_is_refused_with_the_routes_listed(self) -> None:
+        client = self.client(self.node("broker-1"))
+        token = self.signed_in(client, "ada")
+        text = client.command(token, "fly sun")
+        self.assertIn("no route to sun", text)
+        self.assertIn("fly to one of: mars, moon", text)
+        self.assertEqual("You are at Earth.", client.command(token, "where"))
+
+    def test_a_players_place_survives_restarting_every_program(self) -> None:
+        node = self.node("broker-1")
+        client = self.client(node)
+        client.command(self.signed_in(client, "ada"), "fly mars")
+        node.close()
+        self.process.close()
+
+        self.process = start_universe(
+            SPACE_FILE, self.universe_dir, peers=("broker-1", "broker-2"))
+        client = self.client(self.node("broker-1"))
+        token = client.login("ada", PASSWORD)  # logging in joins at Earth, but a placed player stays
+        assert isinstance(token, str), token
+        self.assertEqual("You are at Mars.", client.command(token, "where"))
+
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.root)
