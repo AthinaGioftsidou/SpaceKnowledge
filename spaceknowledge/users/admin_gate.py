@@ -9,6 +9,9 @@ from spaceknowledge.users.session_book import SessionBook
 
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
+# An admin session is much shorter than a customer's: it can do more.
+ADMIN_LIFETIME = 3600.0
+ADMIN_IDLE_TIMEOUT = 600.0
 
 
 class AdminGate:
@@ -21,7 +24,11 @@ class AdminGate:
         if sessions is not None and not isinstance(sessions, SessionBook):
             raise TypeError(f"sessions must be a SessionBook, not {type(sessions).__name__}")
         self._codes = codes
-        self._sessions = sessions if sessions is not None else SessionBook()
+        self._sessions = (
+            sessions
+            if sessions is not None
+            else SessionBook(lifetime=ADMIN_LIFETIME, idle_timeout=ADMIN_IDLE_TIMEOUT)
+        )
 
     def request_code(self, admin: str) -> None:
         self._codes.request(admin)

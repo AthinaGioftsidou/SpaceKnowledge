@@ -7,6 +7,7 @@ import logging
 import secrets
 import threading
 import time
+from spaceknowledge.common.atomic_json import write_text_atomically
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -42,7 +43,8 @@ class InMemoryMailbox(Mailbox):
 
 
 class FileMailbox(Mailbox):
-    """The stand-in mailbox: one text file. A newer message replaces the old."""
+    """The stand-in mailbox: one text file that only its owner can read. A
+    newer message replaces the old one."""
 
     def __init__(self, path: Path) -> None:
         if not isinstance(path, Path):
@@ -50,15 +52,16 @@ class FileMailbox(Mailbox):
         self._path = path
 
     def deliver(self, recipient: str, code: str, lifetime: float) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
+        # The folder is private too: a file nobody can open in a folder anyone
+        # can list is only half protected. (Both modes apply on POSIX systems.)
+        self._path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        write_text_atomically(
+            self._path,
             f"To: {recipient}\n"
             "Subject: your one-time admin code\n\n"
             f"Code: {code}\n"
             f"It can be used once, within {int(lifetime)} seconds.\n",
-            encoding="utf-8",
         )
-
 
 @dataclass
 class _Pending:
