@@ -8,11 +8,12 @@ import unittest
 from pathlib import Path
 
 from spaceknowledge.app.broker_program import BrokerNode, start_broker_node
-from spaceknowledge.app.paths import SERVER_KEY_FILE
+from spaceknowledge.app.paths import MAILBOX_FILE, SERVER_KEY_FILE
 from spaceknowledge.app.universe_program import start_universe
 from spaceknowledge.client.game_client import GameClient, SessionEnded
 from spaceknowledge.common.refusal import Refusal
 from spaceknowledge.tests.transport.helpers import WAIT, in_thread
+from spaceknowledge.client.admin_client import AdminClient
 
 SPACE_FILE = Path(__file__).resolve().parents[3] / "data" / "space.json"
 PASSWORD = "correct horse"
@@ -156,6 +157,29 @@ class TestClientsOverHttp(unittest.TestCase):
         token = client.login("ada", PASSWORD)
         assert isinstance(token, str), token
         self.assertIn("Collected 12 of 20 iron.", client.command(token, "mission"))
+
+    def test_an_administrator_works_through_the_dmz_with_a_separate_identity(self) -> None:
+        node = self.node("broker-1")
+        host, port = node.address
+        player = GameClient(host, port, timeout=10.0)
+        token = self.signed_in(player, "ada")
+        player.command(token, "mine iron 3")
+
+        admin = AdminClient(host, port, timeout=10.0)
+        self.assertIsNone(admin.request_code("root"))
+        mailbox = (self.root / "broker-1" / MAILBOX_FILE).read_text(encoding="utf-8")
+        code = mailbox.split("Code: ")[1][:8]
+        admin_token = admin.login("root", code)
+        assert isinstance(admin_token, str), admin_token
+        self.assertEqual(["ada"], admin.players(admin_token))
+        stats = admin.stats(admin_token)
+        self.assertEqual(("broker-1", 0), (stats["broker"], stats["pending_operations"]))
+        self.assertGreaterEqual(stats["requests_served"], 2)
+        with self.assertRaises(SessionEnded):
+            admin.players(token)                       # a customer token is not an admin token
+        with self.assertRaises(SessionEnded):
+            player.command(admin_token, "inventory")   # and an admin token cannot play
+        self.assertIsInstance(admin.login("root", code), Refusal)   # a code works once
 
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp())

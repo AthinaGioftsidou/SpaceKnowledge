@@ -1,10 +1,12 @@
-"""Settings: where the Universe listens, which Brokers may connect, and which
-ports their DMZs use."""
+"""Settings: where the Universe listens, which Brokers may connect, which ports
+their DMZs use, and who the administrators are."""
 
 import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+
+from spaceknowledge.users.credentials import check_username
 
 DEFAULT_PORT = 7400
 DEFAULT_DMZ_BASE_PORT = 8400
@@ -29,13 +31,15 @@ class Settings:
 
     Each Broker's DMZ listens on `dmz_base_port` plus the Broker's position in
     `brokers`, so the first Broker gets the base port, the next one the port
-    after it, and so on."""
+    after it, and so on. `admins` are the names that may ask for a one-time
+    admin code."""
 
     universe_host: str = "127.0.0.1"
     universe_port: int = DEFAULT_PORT
     brokers: tuple[str, ...] = ("broker-1", "broker-2")
     start: str = "earth"
     dmz_base_port: int = DEFAULT_DMZ_BASE_PORT
+    admins: tuple[str, ...] = ("root",)
 
     def __post_init__(self) -> None:
         if not isinstance(self.universe_host, str) or not self.universe_host:
@@ -60,6 +64,14 @@ class Settings:
             raise SettingsError("dmz_base_port leaves no room for every Broker's port")
         if base <= port <= last:
             raise SettingsError("the DMZ ports must not include the Universe's port")
+        if not isinstance(self.admins, tuple) or not self.admins:
+            raise SettingsError("admins must be a non-empty list of names")
+        for admin in self.admins:
+            if (not isinstance(admin, str) or admin != admin.strip().lower()
+                    or check_username(admin) is not None):
+                raise SettingsError(f"{admin!r} is not a valid administrator name")
+        if len(set(self.admins)) != len(self.admins):
+            raise SettingsError("an administrator name is listed twice")
 
     def dmz_port(self, name: str) -> int:
         """The port this Broker's DMZ listens on."""
@@ -68,7 +80,8 @@ class Settings:
         return self.dmz_base_port + self.brokers.index(name)
 
 
-_FIELDS = {"universe_host", "universe_port", "brokers", "start", "dmz_base_port"}
+_FIELDS = {"universe_host", "universe_port", "brokers", "start", "dmz_base_port", "admins"}
+_LISTS = ("brokers", "admins")
 
 
 def load_settings(path: Path) -> Settings:
@@ -87,8 +100,9 @@ def load_settings(path: Path) -> Settings:
     if unknown:
         raise SettingsError(f"{path.name} has an unknown setting {sorted(unknown)[0]}")
     values = dict(raw)
-    if "brokers" in values:
-        if not isinstance(values["brokers"], list):
-            raise SettingsError("brokers must be a list of names")
-        values["brokers"] = tuple(values["brokers"])
+    for key in _LISTS:
+        if key in values:
+            if not isinstance(values[key], list):
+                raise SettingsError(f"{key} must be a list of names")
+            values[key] = tuple(values[key])
     return Settings(**values)

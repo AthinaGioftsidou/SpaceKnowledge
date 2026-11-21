@@ -63,6 +63,13 @@ class TestSettings(unittest.TestCase):
                 with self.assertRaises(SettingsError):
                     Settings(**kwargs)  # type: ignore[arg-type]
 
+    def test_administrators_default_to_root_and_bad_names_are_refused(self) -> None:
+        self.assertEqual(("root",), Settings().admins)
+        for admins in ((), ("Bad",), ("ab",), ("root", "root"), (5,), "root", ["root"]):
+            with self.subTest(admins=admins):
+                with self.assertRaises(SettingsError):
+                    Settings(admins=admins)  # type: ignore[arg-type]
+
 
 class TestLoading(unittest.TestCase):
     def setUp(self) -> None:
@@ -72,6 +79,13 @@ class TestLoading(unittest.TestCase):
 
     def test_a_missing_file_gives_the_defaults(self) -> None:
         self.assertEqual(Settings(), load_settings(self.path))
+
+    def test_the_administrators_can_be_set_in_the_file(self) -> None:
+        self.path.write_text('{"admins": ["root", "ops"]}', encoding="utf-8")
+        self.assertEqual(Settings(admins=("root", "ops")), load_settings(self.path))
+        self.path.write_text('{"admins": "root"}', encoding="utf-8")
+        with self.assertRaises(SettingsError):
+            load_settings(self.path)
 
     def test_a_full_file_is_read(self) -> None:
         self.path.write_text(

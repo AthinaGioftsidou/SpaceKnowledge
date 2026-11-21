@@ -63,6 +63,13 @@ class TestRegistering(unittest.TestCase):
             registry.register("ada", PASSWORD)
         self.assertFalse(registry.has_account("ada"))
 
+    def test_the_names_are_listed_sorted(self) -> None:
+        registry = a_registry()
+        registry.register("bob", PASSWORD)
+        registry.register("ada", PASSWORD)
+        self.assertEqual(["ada", "bob"], registry.names())
+        self.assertEqual([], a_registry().names())
+
 
 class TestLoggingIn(unittest.TestCase):
     def setUp(self) -> None:

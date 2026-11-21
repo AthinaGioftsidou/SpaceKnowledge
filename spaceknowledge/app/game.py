@@ -1,9 +1,10 @@
-"""Assembly: builds the whole game and owns its two threads."""
+"""Assembly: builds a whole game in one process and owns its threads."""
 
 import json
 from contextlib import ExitStack
 from pathlib import Path
 
+from spaceknowledge.app.admin_service import AdminService
 from spaceknowledge.app.front import Front
 from spaceknowledge.app.paths import ACCOUNTS_FILE, PLAYERS_FILE, SERVER_KEY_FILE, UNIVERSE_FILE
 from spaceknowledge.broker.broker import Broker
@@ -17,6 +18,7 @@ from spaceknowledge.transport.server_auth import (
 from spaceknowledge.transport.threaded_channel import ThreadedChannel
 from spaceknowledge.transport.universe_server import UniverseServer
 from spaceknowledge.universe.deposits import Deposits
+from spaceknowledge.universe.missions import MissionBook
 from spaceknowledge.universe.universe import Universe
 from spaceknowledge.universe.universe_repository import JsonUniverseRepository
 from spaceknowledge.users.account_repository import JsonAccountRepository
@@ -24,27 +26,34 @@ from spaceknowledge.users.accounts import AccountRegistry
 from spaceknowledge.users.credentials import DEFAULT_ITERATIONS
 from spaceknowledge.users.session_book import SessionBook
 from spaceknowledge.world.loader import StandardWorldLoader
-from spaceknowledge.universe.missions import MissionBook
 
 
 class Game:
-    """A running game: the Front that clients use, and the threads behind it.
+    """A running game: the Front that clients use, the threads behind it and,
+    when the game was built with one, the AdminService.
 
-    Always call `close`. It stops the Broker thread first and the Universe
-    thread second, because the Broker may still be waiting on the Universe.
+    Always call `close`. It stops the Broker thread first and the world behind
+    it second, because the Broker may still be waiting on it.
     """
 
-    def __init__(self, front: Front, threads: ExitStack) -> None:
+    def __init__(self, front: Front, threads: ExitStack, admin: AdminService | None = None) -> None:
         if not isinstance(front, Front):
             raise TypeError(f"front must be a Front, not {type(front).__name__}")
         if not isinstance(threads, ExitStack):
             raise TypeError(f"threads must be an ExitStack, not {type(threads).__name__}")
+        if admin is not None and not isinstance(admin, AdminService):
+            raise TypeError(f"admin must be an AdminService, not {type(admin).__name__}")
         self._front = front
         self._threads = threads
+        self._admin = admin
 
     @property
     def front(self) -> Front:
         return self._front
+
+    @property
+    def admin(self) -> AdminService | None:
+        return self._admin
 
     def close(self) -> None:
         """Stop both threads. Harmless to call twice."""
@@ -54,12 +63,12 @@ class Game:
 def build_game(
     world_file: Path, state_dir: Path, iterations: int = DEFAULT_ITERATIONS
 ) -> Game:
-    """Start (or restart) the game and return it.
+    """Start (or restart) the whole game in one process and return it.
 
     Order matters. The Universe loads its saved state, then its thread starts,
     then the Broker loads its own and finishes unfinished operations, then the
     Broker thread starts. If anything fails on the way, the threads already
-    started are stopped again.
+    started are stopped again. (The two-program version is `build_broker`.)
     """
     if not isinstance(world_file, Path):
         raise TypeError(f"world_file must be a Path, not {type(world_file).__name__}")

@@ -9,7 +9,7 @@ from pathlib import Path
 from spaceknowledge.app.broker_program import build_broker
 from spaceknowledge.app.game import Game
 from spaceknowledge.app.keys import read_existing_key
-from spaceknowledge.app.paths import ACCOUNTS_FILE, PLAYERS_FILE, SERVER_KEY_FILE
+from spaceknowledge.app.paths import ACCOUNTS_FILE, PLAYERS_FILE, SERVER_KEY_FILE, MAILBOX_FILE
 from spaceknowledge.app.universe_program import start_universe
 from spaceknowledge.broker.inventory_repository import JsonInventoryRepository
 from spaceknowledge.common.messages import Request
@@ -51,6 +51,21 @@ class TestTwoBrokers(unittest.TestCase):
         token = game.front.login(name, PASSWORD)
         assert isinstance(token, str), token
         return token
+
+    def test_a_broker_reports_how_many_operations_it_finished_at_start(self) -> None:
+        host, port = self.process.address
+        key = read_existing_key(self.universe_dir / SERVER_KEY_FILE)
+        channel = SocketChannel(host, port, ServerIdentity("broker-1", key), 5.0)
+        self.addCleanup(channel.close)
+        channel.send(Request("j1", "join", "ada", "earth"))
+        JsonInventoryRepository(self.root / "broker-1" / PLAYERS_FILE).save(
+            {"ada": [("torch-1", "torch")]}, None,
+            [Request("old-op1", "mine", "ada", "iron", 3)])
+        one = self.broker("broker-1")
+        one.admin.request_code("root")
+        mailbox = (self.root / "broker-1" / MAILBOX_FILE).read_text(encoding="utf-8")
+        token = one.admin.login("root", mailbox.split("Code: ")[1][:8])
+        self.assertEqual(1, one.admin.stats(token)["recovered_at_start"])
 
     def test_players_on_different_brokers_share_one_stock(self) -> None:
         one, two = self.broker("broker-1"), self.broker("broker-2")

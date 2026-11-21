@@ -15,6 +15,8 @@ import time
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
+from spaceknowledge.app.admin_service import AdminService
+from spaceknowledge.dmz.admin_routes import AdminRoutes
 
 from spaceknowledge.app.front import Front
 from spaceknowledge.common.refusal import Refusal
@@ -127,12 +129,18 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _post_routes(self) -> dict[str, Callable[[dict[str, Any]], Reply]]:
         """Path to handler: a table, so adding a route is one row."""
-        return {
+        routes: dict[str, Callable[[dict[str, Any]], Reply]] = {
             "/register": self._register,
             "/login": self._login,
             "/logout": self._logout,
             "/command": self._command,
         }
+        admin = self.server.admin_routes
+        if admin is not None:
+            authorization = self.headers.get("Authorization")
+            for path, action in admin.table().items():
+                routes[path] = lambda body, action=action: action(body, authorization)
+        return routes
 
     @staticmethod
     def _not_found() -> HttpProblem:
@@ -227,10 +235,11 @@ class _HttpServer(ThreadingHTTPServer):
     allow_reuse_address = False
 
     def __init__(self, address: tuple[str, int], front: Front, request_timeout: float,
-                 assets: dict[str, Asset]) -> None:
+                 assets: dict[str, Asset], admin_routes: AdminRoutes | None) -> None:
         self.front = front
         self.request_timeout = request_timeout
         self.assets = assets
+        self.admin_routes = admin_routes
         super().__init__(address, _Handler)
 
     def server_bind(self) -> None:
@@ -257,6 +266,7 @@ class DmzServer:
         port: int = 0,
         request_timeout: float = 10.0,
         assets: dict[str, Asset] | None = None,
+        admin: AdminService | None = None,
     ) -> None:
         if not isinstance(front, Front):
             raise TypeError(f"front must be a Front, not {type(front).__name__}")
@@ -266,11 +276,14 @@ class DmzServer:
             raise ValueError("port must be a whole number from 0 to 65535")
         if request_timeout <= 0:
             raise ValueError("request_timeout must be more than 0 seconds")
+        if admin is not None and not isinstance(admin, AdminService):
+            raise TypeError(f"admin must be an AdminService, not {type(admin).__name__}")
         pages = assets if assets is not None else load_assets(WEB_DIR)
+        routes = AdminRoutes(admin) if admin is not None else None
         self._lock = threading.Lock()
         self._stopped = False
         self._thread: threading.Thread | None = None
-        self._server = _HttpServer((host, port), front, request_timeout, pages)  # binds now
+        self._server = _HttpServer((host, port), front, request_timeout, pages, routes)  # binds now
 
     @property
     def address(self) -> tuple[str, int]:

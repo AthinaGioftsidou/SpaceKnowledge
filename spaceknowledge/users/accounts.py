@@ -44,6 +44,11 @@ class AccountRegistry:
         with self._lock:
             return normalise_username(username) in self._accounts
 
+    def names(self) -> list[str]:
+        """The registered names, sorted."""
+        with self._lock:
+            return sorted(self._accounts)
+
     def register(self, username: str, password: str) -> Refusal | None:
         """None if the account was created, otherwise why not."""
         name = normalise_username(username)
