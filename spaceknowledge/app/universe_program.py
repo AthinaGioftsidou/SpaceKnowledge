@@ -26,6 +26,7 @@ from spaceknowledge.universe.deposits import Deposits
 from spaceknowledge.universe.universe import Universe
 from spaceknowledge.universe.universe_repository import CorruptStateError, JsonUniverseRepository
 from spaceknowledge.world.loader import StandardWorldLoader
+from spaceknowledge.universe.missions import MissionBook
 
 
 class UniverseProcess:
@@ -68,7 +69,8 @@ def start_universe(
     raw = json.loads(world_file.read_text(encoding="utf-8"))
     world = StandardWorldLoader().build(raw)
     universe = Universe(
-        world, Deposits.from_raw(raw), JsonUniverseRepository(state_dir / UNIVERSE_FILE)
+        world, Deposits.from_raw(raw), JsonUniverseRepository(state_dir / UNIVERSE_FILE),
+        missions=MissionBook.from_raw(raw),
     )
     key = load_or_create_key(state_dir / SERVER_KEY_FILE)
     listener = UniverseListener(universe, ServerIdentity("universe", key), host, port, peers)

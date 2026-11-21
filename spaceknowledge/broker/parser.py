@@ -1,12 +1,14 @@
 """Turning what a player typed into a Command."""
 
 from spaceknowledge.broker.command import (
+    AnswerCommand,
     Command,
     DropCommand,
     FlyCommand,
     InventoryCommand,
     LookCommand,
     MineCommand,
+    MissionCommand,
     PickCommand,
     WhereCommand,
 )
@@ -23,6 +25,7 @@ _NO_ARGUMENT = {
     "look": LookCommand,
     "l": LookCommand,
     "where": WhereCommand,
+    "mission": MissionCommand,
 }
 
 _ONE_ARGUMENT = {
@@ -33,6 +36,7 @@ _ONE_ARGUMENT = {
     "fly": FlyCommand,
     "go": FlyCommand,
     "travel": FlyCommand,
+    "answer": AnswerCommand,
 }
 
 # A word that may sit between the verb and what it is about:
@@ -40,7 +44,7 @@ _ONE_ARGUMENT = {
 _FILLER = {"pick": "up", "fly": "to", "go": "to", "travel": "to"}
 
 # What the verb is about, for the message when it is missing. Default: "item".
-_NOUNS = {"fly": "destination", "go": "destination", "travel": "destination"}
+_NOUNS = {"fly": "destination", "go": "destination", "travel": "destination", "answer": "answer"}
 
 # A name, then an optional whole number: "mine iron 3".
 _WITH_AMOUNT = {

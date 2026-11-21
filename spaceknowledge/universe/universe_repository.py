@@ -26,6 +26,8 @@ class UniverseState:
     answers: dict[str, Response]     # op_id -> the answer already given
     # item id -> display name, for the items in `dropped`. Older files have none.
     names: dict[str, str] = field(default_factory=dict)
+    # mission id -> {"collected": int, "complete": bool}. Older files have none.
+    missions: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class UniverseRepository(ABC):
@@ -47,6 +49,7 @@ def _copy_state(state: UniverseState) -> UniverseState:
         {destination_id: list(item_ids) for destination_id, item_ids in state.dropped.items()},
         dict(state.answers),  # Responses are read-only, so sharing them is safe
         dict(state.names),
+        {mission_id: dict(record) for mission_id, record in state.missions.items()},
     )
 
 
@@ -88,6 +91,7 @@ class JsonUniverseRepository(UniverseRepository):
             "dropped": state.dropped,
             "answers": {op_id: self._encode(r) for op_id, r in state.answers.items()},
             "names": state.names,
+            "missions": state.missions,
         }
         write_json_atomically(self._path, document)
 
@@ -130,7 +134,22 @@ class JsonUniverseRepository(UniverseRepository):
             self._check_dropped(raw.get("dropped")),
             self._check_answers(raw.get("answers")),
             self._check_names(raw.get("names", {})),
+            self._check_missions(raw.get("missions", {})),
         )
+
+    def _check_missions(self, raw: Any) -> dict[str, dict[str, Any]]:
+        missions: dict[str, dict[str, Any]] = {}
+        for mission_id, record in self._object(raw, "missions").items():
+            key = self._text(mission_id, "a mission id")
+            if not isinstance(record, dict) or set(record) != {"collected", "complete"}:
+                raise self._corrupt(f"has a bad record for the mission {key}")
+            collected, complete = record["collected"], record["complete"]
+            if isinstance(collected, bool) or not isinstance(collected, int) or collected < 0:
+                raise self._corrupt(f"has a bad collected amount for the mission {key}")
+            if not isinstance(complete, bool):
+                raise self._corrupt(f"has a bad complete flag for the mission {key}")
+            missions[key] = {"collected": collected, "complete": complete}
+        return missions
 
     def _check_names(self, raw: Any) -> dict[str, str]:
         names: dict[str, str] = {}

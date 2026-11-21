@@ -186,6 +186,35 @@ class TestNames(unittest.TestCase):
                 with self.assertRaises(CorruptStateError):
                     self.repository.load()
 
+class TestMissionProgress(unittest.TestCase):
+    def setUp(self) -> None:
+        self.directory = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.directory)
+        self.path = self.directory / "universe.json"
+        self.repository = JsonUniverseRepository(self.path)
+
+    def test_progress_round_trips_in_both_repositories(self) -> None:
+        saved = {"ship": {"collected": 3, "complete": False}}
+        state = UniverseState({}, {}, {}, {}, {}, saved)
+        for repository in (self.repository, InMemoryUniverseRepository()):
+            with self.subTest(repository=type(repository).__name__):
+                repository.save(state)
+                self.assertEqual(saved, repository.load().missions)
+
+    def test_a_file_written_before_missions_existed_still_loads(self) -> None:
+        self.path.write_text(document(), encoding="utf-8")
+        self.assertEqual({}, self.repository.load().missions)
+
+    def test_bad_progress_is_refused(self) -> None:
+        good = {"collected": 1, "complete": False}
+        for missions in ([], {"": good}, {"s": 5}, {"s": {"collected": -1, "complete": False}},
+                         {"s": {"collected": True, "complete": False}}, {"s": {"collected": 1}},
+                         {"s": {"collected": 1, "complete": "no"}}, {"s": {**good, "x": 1}}):
+            with self.subTest(missions=missions):
+                self.path.write_text(document(missions=missions), encoding="utf-8")
+                with self.assertRaises(CorruptStateError):
+                    self.repository.load()
+
 
 if __name__ == "__main__":
     unittest.main()

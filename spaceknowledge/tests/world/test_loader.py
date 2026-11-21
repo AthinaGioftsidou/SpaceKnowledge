@@ -242,6 +242,12 @@ class TestDoorsLoad(unittest.TestCase):
         with self.assertRaises(ValueError):
             StandardWorldLoader().build(spec)
 
+    def test_a_door_that_a_mission_opens_needs_no_key_item(self) -> None:
+        spec = self.a_spec()
+        spec["doors"][0]["key"] = "mission:ship"
+        world = StandardWorldLoader().build(spec)
+        self.assertFalse(world.destination("a").door_to("north").is_passable())
+
 
 class TestTheShippedWorldsDoor(unittest.TestCase):
     def test_the_dome_hatch_is_locked_and_the_key_is_findable(self) -> None:

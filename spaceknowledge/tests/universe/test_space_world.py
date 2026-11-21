@@ -2,6 +2,11 @@
 
 import unittest
 from pathlib import Path
+import json
+from spaceknowledge.common.messages import Request
+from spaceknowledge.universe.deposits import Deposits
+from spaceknowledge.universe.missions import MissionBook
+from spaceknowledge.universe.universe import Universe
 
 from spaceknowledge.world.loader import StandardWorldLoader
 
@@ -26,6 +31,19 @@ class TestTheSpaceWorld(unittest.TestCase):
     def test_you_can_fly_home_from_mars(self) -> None:
         self.assertIs(self.world.destination("earth"), self.world.destination("mars").exit_to("earth"))
 
+
+    def test_the_shipped_galaxy_has_a_locked_mars_and_a_mission_that_opens_it(self) -> None:
+        raw = json.loads(SPACE_FILE.read_text(encoding="utf-8"))
+        earth = self.world.destination("earth")
+        self.assertFalse(earth.door_to("mars").is_passable())
+        self.assertIsNone(earth.door_to("moon"))
+
+        universe = Universe(self.world, Deposits.from_raw(raw), None, missions=MissionBook.from_raw(raw))
+        universe.place_player("ada", "earth")
+        universe.handle(Request("m1", "mine", "ada", "iron", 20))
+        self.assertEqual("question", universe.handle(Request("q1", "mission", "ada", "here")).items[0].item_id)
+        self.assertTrue(universe.handle(Request("a1", "answer", "ada", "iron")).ok)
+        self.assertTrue(universe.handle(Request("f1", "fly", "ada", "mars")).ok)
 
 if __name__ == "__main__":
     unittest.main()

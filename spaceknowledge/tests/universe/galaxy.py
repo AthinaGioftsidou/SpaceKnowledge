@@ -1,6 +1,7 @@
-"""A small galaxy for the travel tests: Earth, the Moon and Mars."""
+"""A small galaxy for the travel and mission tests: Earth, the Moon and Mars."""
 
 from spaceknowledge.universe.deposits import Deposits
+from spaceknowledge.universe.missions import MissionBook
 from spaceknowledge.universe.universe import Universe
 from spaceknowledge.universe.universe_repository import UniverseRepository
 from spaceknowledge.world.destination import Destination
@@ -13,6 +14,7 @@ def a_galaxy(
     repository: UniverseRepository | None = None,
     deposits: Deposits | None = None,
     place: bool = True,
+    missions: MissionBook | None = None,
 ) -> Universe:
     """Earth has routes to the Moon and Mars (the Mars route may have a door).
     With `place`, ada and bob start on Earth. A restarted Universe must not be
@@ -25,7 +27,8 @@ def a_galaxy(
     moon.add_exit("earth", earth)
     mars.add_exit("earth", earth)
     universe = Universe(
-        World({"earth": earth, "moon": moon, "mars": mars}, "earth"), deposits, repository
+        World({"earth": earth, "moon": moon, "mars": mars}, "earth"),
+        deposits, repository, missions=missions,
     )
     if place:
         for player in ("ada", "bob"):

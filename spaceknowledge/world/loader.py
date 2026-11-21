@@ -82,7 +82,7 @@ class WorldLoader(ABC):
         unwinnable world, so that is refused here, at load time."""
         by_side: dict[tuple[str, str], Door] = {}
         for spec in raw.get("doors", []):
-            if spec["key"] not in item_ids:
+            if spec["key"] not in item_ids and not spec["key"].startswith("mission:"):
                 raise ValueError(
                     f"door {spec['id']} needs key {spec['key']}, which no destination holds"
                 )

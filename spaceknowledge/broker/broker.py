@@ -19,7 +19,7 @@ from spaceknowledge.common.refusal import Refusal
 from spaceknowledge.transport.channel import UniverseChannel
 
 # The actions the Broker saves as pending. Looking is not one: it changes nothing.
-ACTIONS = ("add_item", "mine", "join", "pick", "fly")
+ACTIONS = ("add_item", "mine", "join", "pick", "fly", "answer")
 
 # What a brand new player is given, so that `drop` has something to drop.
 STARTING_ITEMS = (("torch", "torch"),)
@@ -163,6 +163,32 @@ class Broker:
         if len(response.items) != 1:
             return Refusal(f"fly to {wanted}", "the game gave an unexpected answer",
                            "type where to see where you are")
+        return response.items[0]
+
+    def mission(self, player_id: str) -> ItemInfo | Refusal:
+        """The current mission as plain data. Changes nothing."""
+        if player_id not in self._inventories:
+            return self._unknown_player("read the mission", player_id)
+        return self._universe.mission(player_id)
+
+    def answer(self, player_id: str, text: str) -> ItemInfo | Refusal:
+        """Answer the mission's question. The finished mission, or why not.
+        Goes through the crash-safe path, because a right answer changes the world."""
+        if player_id not in self._inventories:
+            return self._unknown_player("answer", player_id)
+        cleaned = " ".join(text.split())
+        if not cleaned:
+            return Refusal("answer", "no answer was given",
+                           "type answer and then what you think it is")
+        response = self._exchange(Request(self._next_op_id(), "answer", player_id, cleaned))
+        return self._one_item(response, f"answer {cleaned}")
+
+    @staticmethod
+    def _one_item(response: Response, what: str) -> ItemInfo | Refusal:
+        if response.refusal is not None:
+            return response.refusal
+        if len(response.items) != 1:
+            return Refusal(what, "the game gave an unexpected answer", "try again in a moment")
         return response.items[0]
 
     def pick(self, player_id: str, term: str) -> Refusal | None:

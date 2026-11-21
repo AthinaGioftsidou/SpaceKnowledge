@@ -24,11 +24,12 @@ def thread_names() -> set[str]:
 
 
 class TestClientsOverHttp(unittest.TestCase):
-    
+
     def test_a_player_flies_and_each_place_has_its_own_stock_and_ground(self) -> None:
         one, two = self.client(self.node("broker-1")), self.client(self.node("broker-2"))
         ada, bob = self.signed_in(one, "ada"), self.signed_in(two, "bob")
         self.assertIn("no nickel to mine", one.command(ada, "mine nickel 1"))
+        self.finish_the_mission(one, ada)
         reply = one.command(ada, "fly to mars")
         self.assertTrue(reply.startswith("You fly to Mars."))
         self.assertIn("Nickel can be mined here.", reply)
@@ -49,10 +50,29 @@ class TestClientsOverHttp(unittest.TestCase):
         self.assertIn("fly to one of: mars, moon", text)
         self.assertEqual("You are at Earth.", client.command(token, "where"))
 
-    def test_a_players_place_survives_restarting_every_program(self) -> None:
+    def test_a_player_flies_and_each_place_has_its_own_stock_and_ground(self) -> None:
+        one, two = self.client(self.node("broker-1")), self.client(self.node("broker-2"))
+        ada, bob = self.signed_in(one, "ada"), self.signed_in(two, "bob")
+        self.assertIn("no nickel to mine", one.command(ada, "mine nickel 1"))
+        self.finish_the_mission(one, ada)
+        reply = one.command(ada, "fly to mars")
+        self.assertTrue(reply.startswith("You fly to Mars."))
+        self.assertIn("Nickel can be mined here.", reply)
+        self.assertEqual("You are at Mars.", one.command(ada, "where"))
+        self.assertEqual("You are at Earth.", two.command(bob, "where"))
+        self.assertEqual("You mine 5 nickel.", one.command(ada, "mine nickel 5"))
+        self.assertIn("no nickel to mine", two.command(bob, "mine nickel 1"))
+        self.assertEqual("You drop the torch.", one.command(ada, "drop torch"))
+        self.assertEqual("Nothing lies on the ground here.", two.command(bob, "look"))
+        two.command(bob, "fly mars")
+        self.assertEqual("On the ground here: torch", two.command(bob, "look"))
+
+    def test_a_players_place_and_the_open_gate_survive_restarting_every_program(self) -> None:
         node = self.node("broker-1")
         client = self.client(node)
-        client.command(self.signed_in(client, "ada"), "fly mars")
+        token = self.signed_in(client, "ada")
+        self.finish_the_mission(client, token)
+        client.command(token, "fly mars")
         node.close()
         self.process.close()
 
@@ -62,6 +82,80 @@ class TestClientsOverHttp(unittest.TestCase):
         token = client.login("ada", PASSWORD)  # logging in joins at Earth, but a placed player stays
         assert isinstance(token, str), token
         self.assertEqual("You are at Mars.", client.command(token, "where"))
+        bob = self.signed_in(client, "bob")
+        self.assertTrue(client.command(bob, "fly mars").startswith("You fly to Mars."))
+
+    def test_mars_is_locked_until_the_players_together_finish_the_mission(self) -> None:
+        one, two = self.client(self.node("broker-1")), self.client(self.node("broker-2"))
+        ada, bob = self.signed_in(one, "ada"), self.signed_in(two, "bob")
+        self.assertIn("shut", two.command(bob, "fly to mars"))
+        self.assertIn("(collecting)", one.command(ada, "mission"))
+        self.assertEqual("You mine 12 iron.", one.command(ada, "mine iron 12"))
+        self.assertEqual("You mine 8 iron.", two.command(bob, "mine iron 8"))
+        self.assertIn("(question)", two.command(bob, "mission"))
+        self.assertIn("Why:", one.command(ada, "answer copper"))
+        self.assertIn("shut", two.command(bob, "fly mars"))
+        self.assertTrue(one.command(ada, "answer it is rust").startswith("Correct!"))
+        self.assertTrue(two.command(bob, "fly mars").startswith("You fly to Mars."))
+
+    def test_mission_progress_survives_restarting_every_program(self) -> None:
+        node = self.node("broker-1")
+        client = self.client(node)
+        client.command(self.signed_in(client, "ada"), "mine iron 12")
+        node.close()
+        self.process.close()
+
+        self.process = start_universe(
+            SPACE_FILE, self.universe_dir, peers=("broker-1", "broker-2"))
+        client = self.client(self.node("broker-1"))
+        token = client.login("ada", PASSWORD)
+        assert isinstance(token, str), token
+        self.assertIn("Collected 12 of 20 iron.", client.command(token, "mission"))
+
+    def test_a_players_place_and_the_open_gate_survive_restarting_every_program(self) -> None:
+        node = self.node("broker-1")
+        client = self.client(node)
+        token = self.signed_in(client, "ada")
+        self.finish_the_mission(client, token)
+        client.command(token, "fly mars")
+        node.close()
+        self.process.close()
+
+        self.process = start_universe(
+            SPACE_FILE, self.universe_dir, peers=("broker-1", "broker-2"))
+        client = self.client(self.node("broker-1"))
+        token = client.login("ada", PASSWORD)  # logging in joins at Earth, but a placed player stays
+        assert isinstance(token, str), token
+        self.assertEqual("You are at Mars.", client.command(token, "where"))
+        bob = self.signed_in(client, "bob")
+        self.assertTrue(client.command(bob, "fly mars").startswith("You fly to Mars."))
+
+    def test_mars_is_locked_until_the_players_together_finish_the_mission(self) -> None:
+        one, two = self.client(self.node("broker-1")), self.client(self.node("broker-2"))
+        ada, bob = self.signed_in(one, "ada"), self.signed_in(two, "bob")
+        self.assertIn("shut", two.command(bob, "fly to mars"))
+        self.assertIn("(collecting)", one.command(ada, "mission"))
+        self.assertEqual("You mine 12 iron.", one.command(ada, "mine iron 12"))
+        self.assertEqual("You mine 8 iron.", two.command(bob, "mine iron 8"))
+        self.assertIn("(question)", two.command(bob, "mission"))
+        self.assertIn("Why:", one.command(ada, "answer copper"))
+        self.assertIn("shut", two.command(bob, "fly mars"))
+        self.assertTrue(one.command(ada, "answer it is rust").startswith("Correct!"))
+        self.assertTrue(two.command(bob, "fly mars").startswith("You fly to Mars."))
+
+    def test_mission_progress_survives_restarting_every_program(self) -> None:
+        node = self.node("broker-1")
+        client = self.client(node)
+        client.command(self.signed_in(client, "ada"), "mine iron 12")
+        node.close()
+        self.process.close()
+
+        self.process = start_universe(
+            SPACE_FILE, self.universe_dir, peers=("broker-1", "broker-2"))
+        client = self.client(self.node("broker-1"))
+        token = client.login("ada", PASSWORD)
+        assert isinstance(token, str), token
+        self.assertIn("Collected 12 of 20 iron.", client.command(token, "mission"))
 
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp())
@@ -78,6 +172,11 @@ class TestClientsOverHttp(unittest.TestCase):
             dmz_port=dmz_port, iterations=1, timeout=2.0)
         self.addCleanup(node.close)
         return node
+    
+    def finish_the_mission(self, client: GameClient, token: str) -> None:
+        self.assertEqual("You mine 20 iron.", client.command(token, "mine iron 20"))
+        self.assertIn("(question)", client.command(token, "mission"))
+        self.assertTrue(client.command(token, "answer iron").startswith("Correct!"))
 
     @staticmethod
     def client(node: BrokerNode) -> GameClient:

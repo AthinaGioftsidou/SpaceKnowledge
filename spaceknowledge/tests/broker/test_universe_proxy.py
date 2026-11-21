@@ -100,5 +100,18 @@ class TestWhere(unittest.TestCase):
         universe, _, _ = a_proxy(Response("x"))
         self.assertIsInstance(universe.where("ada"), Refusal)
 
+    def test_a_mission_comes_back_as_one_item_info(self) -> None:
+        info = ItemInfo("collecting", "Upgrade the ship", "Collected 0 of 20 iron.")
+        universe, channel, _ = a_proxy(Response("x", items=(info,)))
+        self.assertIs(info, universe.mission("ada"))
+        self.assertEqual("mission", channel.requests[0].action)
+
+    def test_a_refused_mission_or_an_odd_answer_is_a_refusal(self) -> None:
+        refusal = Refusal("mission", "none", "wait")
+        universe, _, _ = a_proxy(Response("x", refusal))
+        self.assertIs(refusal, universe.mission("ada"))
+        universe, _, _ = a_proxy(Response("x"))
+        self.assertIsInstance(universe.mission("ada"), Refusal)
+
 if __name__ == "__main__":
     unittest.main()

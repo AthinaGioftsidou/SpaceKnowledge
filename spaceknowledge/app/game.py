@@ -24,6 +24,7 @@ from spaceknowledge.users.accounts import AccountRegistry
 from spaceknowledge.users.credentials import DEFAULT_ITERATIONS
 from spaceknowledge.users.session_book import SessionBook
 from spaceknowledge.world.loader import StandardWorldLoader
+from spaceknowledge.universe.missions import MissionBook
 
 
 class Game:
@@ -68,7 +69,8 @@ def build_game(
     raw = json.loads(world_file.read_text(encoding="utf-8"))
     world = StandardWorldLoader().build(raw)
     universe = Universe(
-        world, Deposits.from_raw(raw), JsonUniverseRepository(state_dir / UNIVERSE_FILE)
+        world, Deposits.from_raw(raw), JsonUniverseRepository(state_dir / UNIVERSE_FILE),
+        missions=MissionBook.from_raw(raw),
     )
     key = load_or_create_key(state_dir / SERVER_KEY_FILE)
     accounts = AccountRegistry(JsonAccountRepository(state_dir / ACCOUNTS_FILE), iterations)

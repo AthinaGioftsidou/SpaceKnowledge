@@ -144,6 +144,13 @@ function parseInventory(text) {
   return { items: items, resources: resources };
 }
 
+function showMission(text) {
+  const lines = text.split("\n");
+  const match = /^Mission: (.+) \((\w+)\)$/.exec(lines[0]);
+  $("mission").textContent = match ? match[1] + " - " + match[2] : "none";
+  $("mission-detail").textContent = match && lines[1] ? lines[1] : "";
+}
+
 async function refreshPanel() {
   const place = await send("where");
   if (place === null) return;
@@ -151,10 +158,15 @@ async function refreshPanel() {
   if (match) setPlace(match[1]);   // a refusal does not match, so the old background stays
 
   const stuff = await send("inventory");
-  if (stuff === null || stuff.startsWith("Refused")) return;
-  const parsed = parseInventory(stuff);
-  fillList("items", parsed.items, "nothing");
-  fillList("resources", parsed.resources, "none");
+  if (stuff === null) return;
+  if (!stuff.startsWith("Refused")) {
+    const parsed = parseInventory(stuff);
+    fillList("items", parsed.items, "nothing");
+    fillList("resources", parsed.resources, "none");
+  }
+
+  const mission = await send("mission");
+  if (mission !== null) showMission(mission);
 }
 
 async function enterGame() {

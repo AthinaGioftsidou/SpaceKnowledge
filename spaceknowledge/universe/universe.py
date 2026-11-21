@@ -4,6 +4,7 @@ from spaceknowledge.common.item_cycle import PICK, ItemCycle
 from spaceknowledge.common.messages import ItemInfo, Request, Response
 from spaceknowledge.common.refusal import Refusal
 from spaceknowledge.universe.deposits import Deposits
+from spaceknowledge.universe.missions import COMPLETE, Mission, MissionBook, MissionError
 from spaceknowledge.universe.universe_repository import (
     CorruptStateError,
     InMemoryUniverseRepository,
@@ -16,7 +17,8 @@ from spaceknowledge.world.item import Item, PlainItem
 from spaceknowledge.world.world import World
 
 # Questions that change nothing. Their answers are not remembered or saved.
-READ_ONLY = ("look", "where")
+READ_ONLY = ("look", "where", "mission")
+
 # How many answered operations are remembered. It must be larger than the
 # number of operations that can be unfinished at once, because an answer that
 # has been forgotten is decided again.
@@ -26,10 +28,12 @@ DEFAULT_MAX_ANSWERS = 1000
 class Universe:
     """The Broker asks; the Universe decides.
 
-    Only the Universe thread touches the world, so the world needs no lock. It
-    knows each player's location and nothing else about them. Every item lying
-    on the ground has an ItemCycle in the PICK process, held by the Universe
-    until a pick finishes.
+    Only one request at a time changes the world (the listener holds a lock
+    around `handle`), so the world needs no lock of its own. It knows each
+    player's location and nothing else about them. Every item lying on the
+    ground has an ItemCycle in the PICK process, held by the Universe until a
+    pick finishes. Missions are shared: everybody's mining counts, and a
+    finished mission opens a gate for everybody.
 
     State is loaded from the repository at start and saved after every request
     it decides, so a restart picks up where it stopped.
@@ -41,6 +45,7 @@ class Universe:
         deposits: Deposits | None = None,
         repository: UniverseRepository | None = None,
         max_answers: int = DEFAULT_MAX_ANSWERS,
+        missions: MissionBook | None = None,
     ) -> None:
         if not isinstance(world, World):
             raise TypeError(f"world must be a World, not {type(world).__name__}")
@@ -54,10 +59,13 @@ class Universe:
             raise TypeError(f"max_answers must be an int, not {type(max_answers).__name__}")
         if max_answers < 1:
             raise ValueError("max_answers must be at least 1")
-        self._max_answers = max_answers
+        if missions is not None and not isinstance(missions, MissionBook):
+            raise TypeError(f"missions must be a MissionBook, not {type(missions).__name__}")
         self._world = world
         self._deposits = deposits if deposits is not None else Deposits({})
         self._repository = repository if repository is not None else InMemoryUniverseRepository()
+        self._max_answers = max_answers
+        self._missions = missions if missions is not None else MissionBook()
         self._locations: dict[str, str] = {}
         self._dropped: dict[str, list[str]] = {}
         self._ground: dict[str, dict[str, ItemCycle]] = {}
@@ -68,10 +76,13 @@ class Universe:
             "mine": self._mine,
             "join": self._join,
             "look": self._look,
-            "pick": self._pick,
             "where": self._where,
+            "pick": self._pick,
             "fly": self._fly,
+            "mission": self._mission,
+            "answer": self._answer,
         }
+        self._check_missions_fit_the_world()
         self._restore()
 
     def place_player(self, player_id: str, destination_id: str) -> None:
@@ -93,12 +104,6 @@ class Universe:
         the admin view."""
         return len(self._answers)
 
-    def _forget_old_answers(self) -> None:
-        """Keep the newest answers only. A dict keeps insertion order, so the
-        first key is always the oldest."""
-        while len(self._answers) > self._max_answers:
-            del self._answers[next(iter(self._answers))]
-
     def handle(self, request: Request) -> Response:
         if not isinstance(request, Request):
             raise TypeError(f"request must be a Request, not {type(request).__name__}")
@@ -112,6 +117,12 @@ class Universe:
         self._forget_old_answers()
         self._save()
         return response
+
+    def _forget_old_answers(self) -> None:
+        """Keep the newest answers only. A dict keeps insertion order, so the
+        first key is always the oldest."""
+        while len(self._answers) > self._max_answers:
+            del self._answers[next(iter(self._answers))]
 
     def _decide(self, request: Request) -> Response:
         handler = self._handlers.get(request.action)
@@ -144,6 +155,15 @@ class Universe:
     @staticmethod
     def _info(item: Item) -> ItemInfo:
         return ItemInfo(item.item_id, item.name, item.describe())
+
+    @staticmethod
+    def _place(destination: Destination) -> ItemInfo:
+        """A destination as plain data: an id, a name and a description."""
+        return ItemInfo(
+            destination.destination_id,
+            destination.name,
+            destination.description or destination.name,
+        )
 
     def _join(self, request: Request) -> Response:
         """Place a player at the destination named in `item_id`. A player who
@@ -184,15 +204,6 @@ class Universe:
             return self._unknown_player(request)
         items = sorted(destination.contents(), key=lambda item: item.item_id)
         return Response(request.op_id, items=tuple(self._info(item) for item in items))
-    
-    @staticmethod
-    def _place(destination: Destination) -> ItemInfo:
-        """A destination as plain data: an id, a name and a description."""
-        return ItemInfo(
-            destination.destination_id,
-            destination.name,
-            destination.description or destination.name,
-        )
 
     def _where(self, request: Request) -> Response:
         """Where the player is, as plain place data. Changes nothing."""
@@ -280,7 +291,69 @@ class Universe:
                 f"ask for {left} or fewer",
             )
         self._deposits.remove(destination.destination_id, request.item_id, request.amount)
+        # The Universe saw the mining itself, so it counts it for the mission.
+        self._missions.record_mining(
+            destination.destination_id, request.item_id, request.amount
+        )
         return Response(request.op_id)
+
+    def _mission_info(self, mission: Mission) -> ItemInfo:
+        """A mission as plain data: its status, its title and what to tell the
+        player."""
+        return ItemInfo(
+            self._missions.status(mission.mission_id), mission.title, self._missions.text(mission)
+        )
+
+    def _mission(self, request: Request) -> Response:
+        """The current mission and how far it has got. Changes nothing."""
+        if self._locations.get(request.player_id) is None:
+            return self._unknown_player(request)
+        mission = self._missions.current()
+        if mission is None:
+            return self._refuse(
+                request, "there is no mission in this galaxy yet", "explore, and check back later"
+            )
+        return Response(request.op_id, items=(self._mission_info(mission),))
+
+    def _answer(self, request: Request) -> Response:
+        """Answer the question the current mission is waiting on. A right answer
+        completes the mission and opens its gate for everybody."""
+        if self._locations.get(request.player_id) is None:
+            return self._unknown_player(request)
+        result = self._missions.answer(request.item_id)
+        if result is None:
+            return self._refuse(
+                request,
+                "there is no question waiting for an answer",
+                "type mission to see what needs doing",
+            )
+        mission, correct = result
+        if not correct:
+            return self._refuse(request, "that is not the answer", f"think again: {mission.hint}")
+        self._open_way(mission)
+        return Response(request.op_id, items=(self._mission_info(mission),))
+
+    def _open_way(self, mission: Mission) -> None:
+        """Unlock the gate that this mission opens."""
+        door = self._world.destination(mission.opens_from).door_to(mission.opens_direction)
+        if door is not None:
+            door.unlock(door.key_id)
+
+    def _check_missions_fit_the_world(self) -> None:
+        """Every mission must open a gate that exists and that only it can open."""
+        for mission in self._missions.all():
+            try:
+                door = self._world.destination(mission.opens_from).door_to(mission.opens_direction)
+            except KeyError:
+                raise ValueError(
+                    f"the mission {mission.mission_id} opens a route from "
+                    f"{mission.opens_from}, which is not in this world"
+                ) from None
+            if door is None or door.key_id != mission.key():
+                raise ValueError(
+                    f"the mission {mission.mission_id} needs a door on {mission.opens_from} "
+                    f"{mission.opens_direction} whose key is {mission.key()}"
+                )
 
     def _refuse(self, request: Request, why: str, next_step: str) -> Response:
         refusal = Refusal(f"{request.action} {request.item_id}", why, next_step)
@@ -305,6 +378,11 @@ class Universe:
         self._dropped = {d: list(ids) for d, ids in state.dropped.items()}
         self._answers = dict(state.answers)
         self._forget_old_answers()
+        self._missions.restore(state.missions)
+        # Doors are not saved: a finished mission simply opens its gate again.
+        for mission in self._missions.all():
+            if self._missions.status(mission.mission_id) == COMPLETE:
+                self._open_way(mission)
 
     def _check_against_world(self, state: UniverseState) -> None:
         named = [*state.locations.values(), *state.stock, *state.dropped]
@@ -323,6 +401,10 @@ class Universe:
                         f"the saved state drops {item_id} in {destination.name}, "
                         "where one already lies"
                     )
+        try:
+            self._missions.check(state.missions)
+        except MissionError as problem:
+            raise CorruptStateError(str(problem)) from None
 
     def _dropped_names(self) -> dict[str, str]:
         """The display name of every dropped item still lying in the world."""
@@ -343,5 +425,6 @@ class Universe:
                 {d: list(ids) for d, ids in self._dropped.items()},
                 dict(self._answers),
                 self._dropped_names(),
+                self._missions.snapshot(),
             )
         )

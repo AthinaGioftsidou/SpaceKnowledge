@@ -4,24 +4,44 @@
     {
       "id": "earth",
       "name": "Earth",
-      "description": "Our home planet. Iron, wood and water can be gathered here.",
+      "description": "Our home planet, the only world we know with liquid water on its surface and with life. About 71% of its surface is ocean. Iron, wood and water can be gathered here. At the edge of the base a launch gate leads to Mars, locked until the ship is upgraded. Type mission to see what needs doing.",
       "exits": { "moon": "moon", "mars": "mars" },
       "resources": { "iron": 500, "wood": 300, "water": 800 }
     },
     {
       "id": "moon",
       "name": "The Moon",
-      "description": "Earth's only natural satellite, grey and airless.",
+      "description": "Earth's only natural satellite, grey and airless. It is about a quarter of Earth's width and has no atmosphere to erase anything, so a footprint here lasts for millions of years. Helium-3 is found in its dust.",
       "exits": { "earth": "earth" },
       "resources": { "helium_3": 100 }
     },
     {
       "id": "mars",
       "name": "Mars",
-      "description": "The red planet. Nickel can be mined here.",
+      "description": "The red planet. Its dust is full of iron oxide, which is rust, and that is what gives it the colour. A day here lasts about 24 hours and 40 minutes, but the thin carbon dioxide air is far too thin to breathe. Nickel can be mined here.",
       "exits": { "earth": "earth" },
       "resources": { "nickel": 200 }
     }
   ],
-  "doors": []
+  "doors": [
+    {
+      "id": "mars_gate",
+      "name": "launch gate",
+      "key": "mission:ship_upgrade",
+      "sides": [{ "destination": "earth", "direction": "mars" }]
+    }
+  ],
+  "missions": [
+    {
+      "id": "ship_upgrade",
+      "title": "Upgrade the ship",
+      "goal": { "resource": "iron", "amount": 20, "destination": "earth" },
+      "briefing": "The ship's engines need iron for new hull plates and fuel lines. Mine 20 iron on Earth together with the other players: everybody's mining counts. When it is gathered, the launch gate to Mars will ask you a question.",
+      "question": "Mars is called the Red Planet. Its dust is rusted: the same metal you just mined has been reacting with traces of oxygen for billions of years. Which metal makes Mars red?",
+      "answers": ["iron", "iron oxide", "rust"],
+      "hint": "you have just mined it, and rust is what happens when it meets oxygen",
+      "success": "Mars is red because its surface dust is full of iron oxide, which is rust. Iron on the surface reacted with tiny amounts of oxygen and water over billions of years, just like an old nail left in the rain. The launch gate opens: type fly to mars.",
+      "opens": { "destination": "earth", "direction": "mars" }
+    }
+  ]
 }

@@ -3,7 +3,7 @@
 from collections.abc import Callable
 
 from spaceknowledge.broker.item_proxy import ItemProxy
-from spaceknowledge.common.messages import Request
+from spaceknowledge.common.messages import ItemInfo, Request
 from spaceknowledge.common.refusal import Refusal
 from spaceknowledge.transport.channel import UniverseChannel
 
@@ -46,6 +46,16 @@ class UniverseProxy:
                            "try again in a moment")
         place = response.items[0]
         return place.item_id, place.name
+
+    def mission(self, player_id: str) -> ItemInfo | Refusal:
+        """The current mission as plain data: its status, title and text."""
+        response = self._channel.send(Request(self._next_op_id(), "mission", player_id, "here"))
+        if not response.ok:
+            return response.refusal  # type: ignore[return-value]
+        if len(response.items) != 1:
+            return Refusal("read the mission", "the game gave an unexpected answer",
+                           "try again in a moment")
+        return response.items[0]
 
     def pick(self, proxy: ItemProxy, player_id: str) -> Refusal | None:
         """Put the proxy in flight, then send the pick through the Broker's
