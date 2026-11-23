@@ -1,14 +1,15 @@
-"""Tests for write_json_atomically."""
+"""Tests for write_json_atomically and write_text_atomically."""
 
 import json
+import os
 import shutil
+import stat
 import tempfile
 import unittest
-import os
 from pathlib import Path
 from unittest.mock import patch
 
-from spaceknowledge.common.atomic_json import write_json_atomically
+from spaceknowledge.common.atomic_json import write_json_atomically, write_text_atomically
 
 
 class TestWriteJsonAtomically(unittest.TestCase):
@@ -78,6 +79,31 @@ class TestWriteJsonAtomically(unittest.TestCase):
         write_json_atomically(self.path, {"a": 1})
         self.assertEqual("half written by someone else", stale.read_text(encoding="utf-8"))
         self.assertEqual({"a": 1}, self.read())
+
+class TestWriteTextAtomically(unittest.TestCase):
+    def setUp(self) -> None:
+        self.directory = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.directory)
+        self.path = self.directory / "note.txt"
+
+    def test_the_text_is_written_and_replaced(self) -> None:
+        write_text_atomically(self.path, "one")
+        write_text_atomically(self.path, "two")
+        self.assertEqual("two", self.path.read_text(encoding="utf-8"))
+        self.assertEqual(["note.txt"], sorted(p.name for p in self.directory.iterdir()))
+
+    def test_a_failed_replace_keeps_the_old_text_and_leaves_nothing(self) -> None:
+        write_text_atomically(self.path, "old")
+        with patch("spaceknowledge.common.atomic_json.os.replace", side_effect=OSError("full")):
+            with self.assertRaises(OSError):
+                write_text_atomically(self.path, "new")
+        self.assertEqual("old", self.path.read_text(encoding="utf-8"))
+        self.assertEqual(["note.txt"], sorted(p.name for p in self.directory.iterdir()))
+
+    @unittest.skipIf(os.name == "nt", "file modes are a POSIX feature")
+    def test_the_file_is_readable_by_its_owner_only(self) -> None:
+        write_text_atomically(self.path, "secret")
+        self.assertEqual(0o600, stat.S_IMODE(self.path.stat().st_mode))
 
 
 if __name__ == "__main__":
